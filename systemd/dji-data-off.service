@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep DJI modem cellular data disabled by default
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/dji-phone-gateway/gateway.env
+ExecStart=/opt/dji-phone-gateway/bin/dji-data off
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+

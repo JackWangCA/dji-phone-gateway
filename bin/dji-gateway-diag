@@ -1,0 +1,26 @@
+#!/bin/sh
+set -u
+
+env_file=/etc/dji-phone-gateway/gateway.env
+[ -r "$env_file" ] && set -a && . "$env_file" && set +a
+
+echo "USB devices"
+lsusb | grep -Ei '2ca3:4006|2c7c:0125|Quectel' || echo "FAIL: DJI/Quectel modem not found"
+echo "\nSerial ports"
+ls -l /dev/dji-modem-at /dev/ttyUSB* 2>/dev/null || echo "FAIL: no modem serial ports"
+echo "\nAudio devices"
+aplay -l 2>/dev/null | grep -i -A2 'Android\|Quectel' || echo "WARN: modem UAC audio not found"
+echo "\nAsterisk"
+asterisk -rx "quectel show devices" 2>&1 || echo "FAIL: chan_quectel unavailable"
+echo "\nData"
+"${DATA_COMMAND:-/opt/dji-phone-gateway/bin/dji-data}" status 2>&1 || true
+
+if [ "${1:-}" = "--telegram" ]; then
+    if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
+        echo "FAIL: TELEGRAM_BOT_TOKEN is empty"
+    else
+        curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates" | \
+            python3 -c 'import json,sys; d=json.load(sys.stdin); print("Recent chat IDs:", sorted({str(x["message"]["chat"]["id"]) for x in d.get("result",[]) if "message" in x}))'
+    fi
+fi
+

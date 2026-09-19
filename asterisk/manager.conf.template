@@ -1,0 +1,12 @@
+[general]
+enabled=yes
+webenabled=no
+bindaddr=127.0.0.1
+port=5038
+
+[djibridge]
+secret=@AMI_PASSWORD@
+read=system,call,command,reporting
+write=command
+permit=127.0.0.1/255.255.255.255
+

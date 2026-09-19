@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Send an incoming SMS to the configured Telegram chat; called as an Asterisk AGI."""
+import json
+import os
+import re
+import sys
+import urllib.parse
+import urllib.request
+
+for line in sys.stdin:
+    if not line.strip():
+        break
+
+def agi_variable(name):
+    print(f"GET VARIABLE {name}", flush=True)
+    response = sys.stdin.readline().strip()
+    match = re.match(r"^200 result=1 \((.*)\)$", response)
+    return match.group(1) if match else ""
+
+sender = agi_variable("CALLERID(num)") or "unknown"
+message = agi_variable("SMS_TEXT")
+token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+if not token or not chat:
+    raise SystemExit(1)
+payload = urllib.parse.urlencode({"chat_id": chat, "text": f"SMS from {sender}\n{message}"}).encode()
+req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)
+with urllib.request.urlopen(req, timeout=15) as response:
+    if not json.load(response).get("ok"):
+        raise SystemExit(1)

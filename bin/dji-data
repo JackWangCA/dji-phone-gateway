@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+operation=${1:-status}
+connection=${CELLULAR_CONNECTION:-cellular}
+interface=${WWAN_INTERFACE:-wwan0}
+table=dji_gateway
+
+ensure_table() {
+    nft list table inet "$table" >/dev/null 2>&1 || nft add table inet "$table"
+    nft list chain inet "$table" output >/dev/null 2>&1 || \
+        nft 'add chain inet '"$table"' output { type filter hook output priority -10; policy accept; }'
+}
+
+block_data() {
+    ensure_table
+    nft flush chain inet "$table" output
+    nft add rule inet "$table" output oifname "$interface" counter reject
+}
+
+case "$operation" in
+    on)
+        ensure_table
+        nft flush chain inet "$table" output
+        nmcli connection up "$connection"
+        echo "Cellular data enabled on $interface."
+        ;;
+    off)
+        nmcli connection down "$connection" >/dev/null 2>&1 || true
+        block_data
+        echo "Cellular data disabled and blocked on $interface."
+        ;;
+    status)
+        if nft list chain inet "$table" output 2>/dev/null | grep -q 'oifname.*reject'; then
+            echo "off (firewall blocked on $interface)"
+        elif nmcli -t -f NAME connection show --active 2>/dev/null | grep -Fxq "$connection"; then
+            echo "on ($connection via $interface)"
+        else
+            echo "off (connection inactive)"
+        fi
+        ;;
+    *) echo "Usage: $0 {on|off|status}" >&2; exit 2 ;;
+esac
+
