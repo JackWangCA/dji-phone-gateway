@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send an incoming SMS to the configured Telegram chat; called as an Asterisk AGI."""
+"""Store an incoming SMS and optionally forward it to Telegram via Asterisk AGI."""
 import json
 import os
 import re
@@ -18,8 +18,25 @@ def agi_variable(name):
     match = re.match(r"^200 result=1 \((.*)\)$", response)
     return match.group(1) if match else ""
 
+
+def agi_verbose(message, level=1):
+    safe = str(message).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+    print(f'VERBOSE "{safe}" {level}', flush=True)
+    sys.stdin.readline()
+
+
 sender = agi_variable("CALLERID(num)") or "unknown"
+raw_sms = agi_variable("SMS")
 message = agi_variable("SMS_TEXT")
+if raw_sms:
+    try:
+        parsed_sms = json.loads(raw_sms)
+        if isinstance(parsed_sms, dict):
+            sender = str(parsed_sms.get("from") or sender)
+            message = str(parsed_sms.get("msg") or message)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        agi_verbose("DJI gateway: could not parse the inbound SMS payload", 2)
+
 token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 settings_path = os.environ.get("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json")
@@ -36,13 +53,21 @@ try:
     with sqlite3.connect(database) as db:
         db.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, received_at TEXT DEFAULT CURRENT_TIMESTAMP, sender TEXT NOT NULL, body TEXT NOT NULL)")
         db.execute("INSERT INTO messages(sender, body) VALUES (?, ?)", (sender, message))
-except sqlite3.Error:
-    pass
+    agi_verbose(f"DJI gateway: stored inbound SMS from {sender}")
+except sqlite3.Error as exc:
+    agi_verbose(f"DJI gateway: failed to store inbound SMS: {exc}", 3)
+    raise SystemExit(1)
 
 if not token or not chat:
-    raise SystemExit(1)
+    agi_verbose("DJI gateway: Telegram is not configured; SMS stored locally")
+    raise SystemExit(0)
 payload = urllib.parse.urlencode({"chat_id": chat, "text": f"SMS from {sender}\n{message}"}).encode()
 req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)
-with urllib.request.urlopen(req, timeout=15) as response:
-    if not json.load(response).get("ok"):
-        raise SystemExit(1)
+try:
+    with urllib.request.urlopen(req, timeout=15) as response:
+        if not json.load(response).get("ok"):
+            raise RuntimeError("Telegram returned an error")
+    agi_verbose(f"DJI gateway: forwarded inbound SMS from {sender} to Telegram")
+except (OSError, RuntimeError, json.JSONDecodeError) as exc:
+    agi_verbose(f"DJI gateway: Telegram forwarding failed: {exc}", 2)
+    raise SystemExit(1)
