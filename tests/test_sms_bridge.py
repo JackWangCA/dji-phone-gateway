@@ -21,6 +21,12 @@ class ParsingTests(unittest.TestCase):
     def test_sms_flattens_cli_control_characters(self):
         self.assertEqual(bridge.safe_sms("hello\ncore stop now\x00"), "hello core stop now")
 
+    def test_telegram_token_validation(self):
+        self.assertTrue(bridge.valid_bot_token("123456789:abcdefghijklmnopqrstuvwxyz_ABCDE"))
+        self.assertFalse(bridge.valid_bot_token("echo sudo something"))
+        with self.assertRaisesRegex(ValueError, "Paste only the token"):
+            bridge.Telegram("not a token")
+
     def test_unauthorized_chat_is_silent(self):
         class Telegram:
             def send(self, *_):

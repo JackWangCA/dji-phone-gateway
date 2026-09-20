@@ -230,7 +230,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/telegram":
                 settings = load_settings()
                 token = form.get("token", "").strip() or str(settings.get("telegram_bot_token", ""))
-                if not token or ":" not in token:
+                if not token:
                     raise ValueError("Enter the bot token from @BotFather.")
                 tg = Telegram(token)
                 identity = tg.call("getMe", {})["result"]

@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shlex
 import socket
 import subprocess
@@ -16,6 +17,12 @@ import urllib.request
 from dataclasses import dataclass
 
 LOG = logging.getLogger("dji-sms-bridge")
+BOT_TOKEN_RE = re.compile(r"^[0-9]{5,12}:[A-Za-z0-9_-]{20,100}$")
+
+
+def valid_bot_token(token: str) -> bool:
+    """Accept the numeric-id:secret format issued by Telegram's BotFather."""
+    return bool(BOT_TOKEN_RE.fullmatch(token.strip()))
 
 
 @dataclass(frozen=True)
@@ -61,6 +68,8 @@ class Config:
 
 class Telegram:
     def __init__(self, token: str):
+        if not valid_bot_token(token):
+            raise ValueError("Invalid Telegram bot token. Paste only the token from @BotFather.")
         self.base = f"https://api.telegram.org/bot{token}/"
 
     def call(self, method: str, values: dict, timeout: int = 35) -> dict:
