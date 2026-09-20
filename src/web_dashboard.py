@@ -115,7 +115,34 @@ input{{width:100%;padding:11px;border-radius:9px;border:1px solid var(--line);ba
 <section class="card"><h2>Telegram setup</h2><p class="muted">Paste the token from @BotFather. Your saved token is never displayed.</p>
 <form method="post" action="/telegram"><input type="hidden" name="csrf" value="{CSRF_TOKEN}"><label>Bot token</label><input type="password" name="token" placeholder="{'Saved — leave blank to keep it' if token_set else '123456:ABC…'}" autocomplete="off"><label>Authorized chat ID</label><input name="chat_id" value="{html.escape(str(chat_id))}" inputmode="numeric"><button name="action" value="save">Save & send test</button><button name="action" value="discover" class="secondary">Find chat IDs</button></form></section>
 <section class="card"><h2>Send SMS</h2><form method="post" action="/sms"><input type="hidden" name="csrf" value="{CSRF_TOKEN}"><label>Phone number</label><input name="number" placeholder="+15551234567"><label>Message</label><input name="message" maxlength="670"><button>Send SMS</button></form></section></div>
-<section class="card" style="margin-top:16px"><h2>Received SMS</h2><table><thead><tr><th>Received</th><th>From</th><th>Message</th></tr></thead><tbody>{rows}</tbody></table></section>
+<section class="card" style="margin-top:16px"><h2>Received SMS</h2><table><thead><tr><th>Received</th><th>From</th><th>Message</th></tr></thead><tbody id="sms-inbox">{rows}</tbody></table></section>
+<script>
+async function refreshInbox() {{
+  if (document.visibilityState !== 'visible') return;
+  try {{
+    const response = await fetch('/messages', {{cache: 'no-store'}});
+    if (!response.ok) return;
+    const messages = await response.json();
+    const body = document.getElementById('sms-inbox');
+    body.replaceChildren();
+    if (!messages.length) {{
+      const row = body.insertRow();
+      const cell = row.insertCell();
+      cell.colSpan = 3;
+      cell.className = 'muted';
+      cell.textContent = 'No locally received messages yet.';
+      return;
+    }}
+    for (const message of messages) {{
+      const row = body.insertRow();
+      for (const value of [message.received_at, message.sender, message.body]) {{
+        row.insertCell().textContent = value;
+      }}
+    }}
+  }} catch (_) {{}}
+}}
+setInterval(refreshInbox, 5000);
+</script>
 </main></body></html>"""
 
 
@@ -149,7 +176,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def respond_json(self, value: object) -> None:
+        body = json.dumps(value).encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -162,10 +199,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if not self.authenticate():
             return
-        if self.path != "/":
+        if self.path == "/":
+            self.respond(page())
+        elif self.path == "/messages":
+            self.respond_json(
+                [
+                    {"received_at": str(received_at), "sender": str(sender), "body": str(body)}
+                    for received_at, sender, body in inbox()
+                ]
+            )
+        else:
             self.send_error(404)
-            return
-        self.respond(page())
 
     def do_POST(self) -> None:
         if not self.authenticate():
