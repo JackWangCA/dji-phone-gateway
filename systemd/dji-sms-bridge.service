@@ -13,7 +13,8 @@ User=djigateway
 Group=asterisk
 Restart=on-failure
 RestartSec=5
-NoNewPrivileges=true
+# Telegram data controls use the same narrowly scoped sudoers rule.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true

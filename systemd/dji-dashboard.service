@@ -11,7 +11,9 @@ User=djigateway
 Group=asterisk
 Restart=on-failure
 RestartSec=5
-NoNewPrivileges=true
+# This service uses sudo only for the exact commands allowed in
+# /etc/sudoers.d/dji-phone-gateway.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
