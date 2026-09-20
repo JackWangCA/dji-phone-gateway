@@ -9,12 +9,13 @@ Turn a first-generation DJI 4G dongle (Quectel EG25-G) into a private cellular-t
 - Incoming SMS messages are forwarded to one authorized Telegram chat.
 - `/sms +15551234567 hello` sends an SMS.
 - `/data_on`, `/data_off`, and `/status` control/report the modem data path. Data is off by default.
+- A password-protected dashboard on port 8080 configures Telegram, shows received SMS, sends SMS, and switches cellular data.
 
 Telegram bots cannot originate or receive Telegram voice calls and cannot invoke iOS CallKit. Telegram is therefore used only for SMS and controls; SIP supplies the native-call UI.
 
 ## Hardware and network requirements
 
-- Raspberry Pi 3B running 32- or 64-bit Raspberry Pi OS Bookworm Lite.
+- Raspberry Pi 3B running 64-bit Raspberry Pi OS Lite. Trixie is supported; the installer builds Asterisk 20 LTS when the OS repository does not provide Asterisk.
 - DJI 4G module connected over **USB**. SPI is not used by this modem.
 - A separately powered USB hub or modem carrier. LTE transmit bursts can exceed what a Pi 3B USB port supplies reliably.
 - A voice/VoLTE-enabled SIM and an EG25 firmware/carrier combination that supports voice. SMS/data working does not prove that voice is provisioned.
@@ -43,6 +44,8 @@ sudo /opt/dji-phone-gateway/bin/dji-gateway-diag --telegram
 
 Copy the reported chat ID into `TELEGRAM_CHAT_ID`; restart the bridge. Only that exact chat ID is accepted.
 
+Alternatively, open `http://<pi-address>:8080/`, sign in as `admin` with the generated dashboard password, paste the BotFather token, and choose **Find chat IDs**. After you have sent the bot any Telegram message, the dashboard shows your chat ID. Enter it and choose **Save & send test**.
+
 Configure the iPhone SIP client:
 
 - Server: the Pi's Wi-Fi/VPN IP
@@ -55,7 +58,7 @@ Dial normal phone numbers from the SIP app. Incoming cellular calls ring extensi
 
 ## Modem setup
 
-After USB conversion, Linux normally creates `/dev/ttyUSB0` through `/dev/ttyUSB3`; AT commands are usually on `/dev/ttyUSB2`. The installer creates `/dev/dji-modem-at` using udev interface numbering rather than enumeration order. Confirm it with the diagnostic tool before starting Asterisk.
+After USB conversion, Linux normally creates several `/dev/ttyUSB*` ports. On the original DJI `2ca3:4006` firmware tested here, AT commands use interface 3 and serial audio uses interface 1; the installer creates stable `/dev/dji-modem-at` and `/dev/dji-modem-audio` links. Converted Quectel firmware normally uses AT interface 2. Confirm the links with the diagnostic tool before starting Asterisk.
 
 For UAC audio, the channel driver normally exposes an ALSA device named `Android`. If it is absent, enable it once from the Asterisk console:
 
@@ -96,4 +99,5 @@ Create the NetworkManager profile separately for your carrier/APN. The service d
 - Emergency calls are intentionally blocked in the example dialplan. This is not a replacement for a normal phone.
 - Carrier VoLTE support varies by EG25 firmware, SIM, region, and IMEI policy.
 - The installer builds the archived `chan_quectel` driver; future Raspberry Pi OS/Asterisk releases may require a maintained fork.
+- DJI's original `2ca3:4006` firmware reports its manufacturer as `Baiwang`; the installer applies a small compatibility patch so the Quectel driver follows its normal initialization path.
 - Audio quality and stability depend heavily on clean external modem power.

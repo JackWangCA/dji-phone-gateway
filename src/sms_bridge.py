@@ -32,13 +32,23 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
+        settings = {}
+        settings_path = os.getenv("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json")
+        try:
+            with open(settings_path, encoding="utf-8") as stream:
+                settings = json.load(stream)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            pass
+        token = str(settings.get("telegram_bot_token") or os.environ.get("TELEGRAM_BOT_TOKEN", ""))
+        chat_id = str(settings.get("telegram_chat_id") or os.environ.get("TELEGRAM_CHAT_ID", ""))
         required = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "ASTERISK_AMI_USER", "ASTERISK_AMI_PASSWORD"]
-        missing = [key for key in required if not os.environ.get(key)]
+        values = {**os.environ, "TELEGRAM_BOT_TOKEN": token, "TELEGRAM_CHAT_ID": chat_id}
+        missing = [key for key in required if not values.get(key)]
         if missing:
             raise RuntimeError("missing configuration: " + ", ".join(missing))
         return cls(
-            token=os.environ["TELEGRAM_BOT_TOKEN"],
-            chat_id=int(os.environ["TELEGRAM_CHAT_ID"]),
+            token=token,
+            chat_id=int(chat_id),
             ami_user=os.environ["ASTERISK_AMI_USER"],
             ami_password=os.environ["ASTERISK_AMI_PASSWORD"],
             ami_host=os.getenv("ASTERISK_HOST", "127.0.0.1"),

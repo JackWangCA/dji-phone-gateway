@@ -1,14 +1,12 @@
 [Unit]
-Description=DJI modem Telegram SMS bridge
+Description=DJI phone gateway web dashboard
 After=network-online.target asterisk.service
 Wants=network-online.target
-Requires=asterisk.service
 
 [Service]
 Type=simple
 EnvironmentFile=/etc/dji-phone-gateway/gateway.env
-ExecCondition=/bin/sh -c '[ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -s /var/lib/dji-phone-gateway/settings.json ]'
-ExecStart=/usr/bin/python3 /opt/dji-phone-gateway/src/sms_bridge.py
+ExecStart=/usr/bin/python3 /opt/dji-phone-gateway/src/web_dashboard.py
 User=djigateway
 Group=asterisk
 Restart=on-failure

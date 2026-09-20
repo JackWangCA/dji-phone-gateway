@@ -15,51 +15,123 @@ config_root=/etc/dji-phone-gateway
 echo "Installing OS packages..."
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    asterisk asterisk-dev build-essential cmake git libasound2-dev libsqlite3-dev \
-    libjansson-dev pkg-config python3 curl usbutils nftables network-manager sudo
+    build-essential cmake git libasound2-dev libsqlite3-dev libjansson-dev \
+    pkg-config python3 curl usbutils nftables network-manager sudo wget patch \
+    libssl-dev libncurses-dev libnewt-dev libxml2-dev uuid-dev libedit-dev \
+    libsrtp2-dev libspandsp-dev libcurl4-openssl-dev libcap-dev python3-dev
+
+asterisk_version=20.21.0
+if command -v asterisk >/dev/null 2>&1; then
+    echo "Using already installed Asterisk: $(asterisk -V)"
+elif apt-cache policy asterisk | grep -q 'Candidate: [0-9]'; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y asterisk asterisk-dev
+else
+    echo "Asterisk is unavailable from this OS repository; building Asterisk 20 LTS..."
+    asterisk_archive="asterisk-${asterisk_version}.tar.gz"
+    asterisk_build=$(mktemp -d /var/tmp/dji-asterisk.XXXXXX)
+    curl -fL --retry 3 \
+        "https://downloads.asterisk.org/pub/telephony/asterisk/releases/$asterisk_archive" \
+        -o "$asterisk_build/$asterisk_archive"
+    tar -xzf "$asterisk_build/$asterisk_archive" -C "$asterisk_build"
+    cd "$asterisk_build/asterisk-$asterisk_version"
+    ./configure --with-pjproject-bundled --with-jansson-bundled
+    make -j2
+    make install
+    make install-headers
+    make samples
+    cd "$src_dir"
+
+    if ! getent group asterisk >/dev/null; then groupadd --system asterisk; fi
+    if ! id asterisk >/dev/null 2>&1; then
+        useradd --system --home-dir /var/lib/asterisk --shell /usr/sbin/nologin --gid asterisk asterisk
+    fi
+    install -d -o asterisk -g asterisk -m 0750 /var/lib/asterisk /var/log/asterisk /var/spool/asterisk /var/run/asterisk
+    install -m 0644 "$src_dir/systemd/asterisk-source.service" /etc/systemd/system/asterisk.service
+    rm -rf "$asterisk_build"
+fi
+
+if [ ! -f /usr/include/asterisk.h ] || [ ! -f /usr/include/asterisk/buildopts.h ]; then
+    echo "Installing Asterisk development headers..."
+    header_build=$(mktemp -d /var/tmp/dji-asterisk-headers.XXXXXX)
+    header_archive="asterisk-${asterisk_version}.tar.gz"
+    curl -fL --retry 3 \
+        "https://downloads.asterisk.org/pub/telephony/asterisk/releases/$header_archive" \
+        -o "$header_build/$header_archive"
+    tar -xzf "$header_build/$header_archive" -C "$header_build"
+    cd "$header_build/asterisk-$asterisk_version"
+    ./configure --with-pjproject-bundled --with-jansson-bundled
+    make include/asterisk/buildopts.h
+    make install-headers
+    cd "$src_dir"
+    rm -rf "$header_build"
+fi
 
 echo "Building chan_quectel..."
-build_dir=$(mktemp -d /tmp/dji-chan-quectel.XXXXXX)
+build_dir=$(mktemp -d /var/tmp/dji-chan-quectel.XXXXXX)
 trap 'rm -rf "$build_dir"' EXIT INT TERM
-git clone --depth 1 https://github.com/RoEdAl/asterisk-chan-quectel.git "$build_dir/src"
+git clone https://github.com/RoEdAl/asterisk-chan-quectel.git "$build_dir/src"
+patch -d "$build_dir/src" -p1 < "$src_dir/patches/chan-quectel-baiwang.patch"
 cmake -S "$build_dir/src" -B "$build_dir/build" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$build_dir/build" -j2
 cmake --install "$build_dir/build"
+asterisk_moddir=$(pkg-config --variable=moddir asterisk)
+install -d -m 0755 "$asterisk_moddir"
+install -m 0755 "$build_dir/build/src/chan_quectel.so" "$asterisk_moddir/chan_quectel.so"
 
 echo "Installing gateway..."
+if ! id djigateway >/dev/null 2>&1; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin --groups asterisk,dialout djigateway
+else
+    usermod -a -G asterisk,dialout djigateway
+fi
 install -d -m 0755 "$install_root/bin" "$install_root/src" "$config_root"
+install -d -o djigateway -g asterisk -m 0770 /var/lib/dji-phone-gateway
 install -m 0755 "$src_dir/bin/dji-data" "$install_root/bin/dji-data"
 install -m 0755 "$src_dir/bin/dji-gateway-diag" "$install_root/bin/dji-gateway-diag"
 install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"
-install -m 0755 "$src_dir/bin/telegram-notify" /usr/share/asterisk/agi-bin/telegram-notify
+install -m 0755 "$src_dir/src/web_dashboard.py" "$install_root/src/web_dashboard.py"
+asterisk_agidir=$(pkg-config --variable=agidir asterisk)
+install -d -o asterisk -g asterisk -m 0755 "$asterisk_agidir"
+install -m 0755 "$src_dir/bin/telegram-notify" "$asterisk_agidir/telegram-notify"
 install -m 0644 "$src_dir/asterisk/quectel.conf" /etc/asterisk/quectel.conf
 install -m 0644 "$src_dir/asterisk/extensions.conf" /etc/asterisk/extensions.conf
 install -m 0644 "$src_dir/udev/99-dji-eg25.rules" /etc/udev/rules.d/99-dji-eg25.rules
 install -m 0644 "$src_dir/systemd/dji-sms-bridge.service" /etc/systemd/system/dji-sms-bridge.service
 install -m 0644 "$src_dir/systemd/dji-data-off.service" /etc/systemd/system/dji-data-off.service
-printf 'djigateway ALL=(root) NOPASSWD: /opt/dji-phone-gateway/bin/dji-data on, /opt/dji-phone-gateway/bin/dji-data off, /opt/dji-phone-gateway/bin/dji-data status\n' > /etc/sudoers.d/dji-phone-gateway
+install -m 0644 "$src_dir/systemd/dji-dashboard.service" /etc/systemd/system/dji-dashboard.service
+printf 'djigateway ALL=(root) NOPASSWD: /opt/dji-phone-gateway/bin/dji-data on, /opt/dji-phone-gateway/bin/dji-data off, /opt/dji-phone-gateway/bin/dji-data status, /usr/bin/systemctl restart dji-sms-bridge.service\n' > /etc/sudoers.d/dji-phone-gateway
 chmod 0440 /etc/sudoers.d/dji-phone-gateway
 
-if ! id djigateway >/dev/null 2>&1; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin --groups asterisk djigateway
-fi
-
-if [ -t 0 ]; then
-    printf "SIP password for iPhone (blank = generate): "
-    stty -echo; IFS= read -r sip_password; stty echo; echo
+if [ -e /etc/asterisk/pjsip.conf ] && grep -q '^password=' /etc/asterisk/pjsip.conf; then
+    sip_password=$(sed -n 's/^password=//p' /etc/asterisk/pjsip.conf | head -n 1)
 else
-    sip_password=
+    if [ -t 0 ]; then
+        printf "SIP password for iPhone (blank = generate): "
+        stty -echo; IFS= read -r sip_password; stty echo; echo
+    else
+        sip_password=
+    fi
+    [ -n "$sip_password" ] || sip_password=$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')
 fi
-[ -n "$sip_password" ] || sip_password=$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')
-ami_password=$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')
-
 sed "s/@SIP_PASSWORD@/$sip_password/g" "$src_dir/asterisk/pjsip.conf.template" > /etc/asterisk/pjsip.conf
+
+if [ -e "$config_root/gateway.env" ] && grep -q '^ASTERISK_AMI_PASSWORD=.' "$config_root/gateway.env"; then
+    ami_password=$(sed -n 's/^ASTERISK_AMI_PASSWORD=//p' "$config_root/gateway.env" | head -n 1)
+else
+    ami_password=$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')
+fi
 sed "s/@AMI_PASSWORD@/$ami_password/g" "$src_dir/asterisk/manager.conf.template" > /etc/asterisk/manager.conf
 chmod 0640 /etc/asterisk/pjsip.conf /etc/asterisk/manager.conf
 chown root:asterisk /etc/asterisk/pjsip.conf /etc/asterisk/manager.conf
 
 if [ ! -e "$config_root/gateway.env" ]; then
     sed "s/ASTERISK_AMI_PASSWORD=CHANGE_ME/ASTERISK_AMI_PASSWORD=$ami_password/" "$src_dir/config/gateway.env.example" > "$config_root/gateway.env"
+fi
+if ! grep -q '^DASHBOARD_PASSWORD=.' "$config_root/gateway.env"; then
+    dashboard_password=$(od -An -N15 -tx1 /dev/urandom | tr -d ' \n')
+    printf '\nDASHBOARD_HOST=0.0.0.0\nDASHBOARD_PORT=8080\nDASHBOARD_PASSWORD=%s\nGATEWAY_SETTINGS=/var/lib/dji-phone-gateway/settings.json\nSMS_DATABASE=/var/lib/dji-phone-gateway/messages.sqlite3\n' "$dashboard_password" >> "$config_root/gateway.env"
+else
+    dashboard_password=$(sed -n 's/^DASHBOARD_PASSWORD=//p' "$config_root/gateway.env" | tail -n 1)
 fi
 chmod 0640 "$config_root/gateway.env"
 chown root:asterisk "$config_root/gateway.env"
@@ -74,12 +146,16 @@ EOF
 udevadm control --reload-rules
 udevadm trigger
 systemctl daemon-reload
-systemctl enable asterisk dji-data-off.service dji-sms-bridge.service
+systemctl enable asterisk dji-data-off.service dji-sms-bridge.service dji-dashboard.service
 systemctl restart asterisk
 systemctl start dji-data-off.service
+systemctl restart dji-dashboard.service
 
 echo
 echo "Installed. SIP user: iphone"
 echo "SIP password: $sip_password"
+echo "Dashboard: http://$(hostname -I | awk '{print $1}'):8080/"
+echo "Dashboard user: admin"
+echo "Dashboard password: $dashboard_password"
 echo "Next: edit $config_root/gateway.env, then run $install_root/bin/dji-gateway-diag"
 echo "The Telegram bridge remains stopped until its token and chat ID are configured."

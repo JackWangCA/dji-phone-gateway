@@ -1,0 +1,20 @@
+diff --git a/src/at_response.c b/src/at_response.c
+--- a/src/at_response.c
++++ b/src/at_response.c
+@@ -45,5 +45,6 @@ static const unsigned int CLCC_CALL_TYPE_VOICE = 0u;
+ 
+ static const char MANUFACTURER_QUECTEL[] = "Quectel";
++static const char MANUFACTURER_BAIWANG[] = "Baiwang";
+ static const char MANUFACTURER_SIMCOM[]  = "SimCom";
+ 
+ static const int DST_DEF_LEN       = 32;
+@@ -2179,7 +2180,8 @@ static int at_response_cgmi(struct pvt* const pvt, const struct ast_str* const r
+     ast_string_field_set(pvt, manufacturer, ast_str_buffer(response));
+     ast_verb(3, "[%s] Manufacturer: %s\n", PVT_ID(pvt), pvt->manufacturer);
+ 
+-    if (!strncasecmp(ast_str_buffer(response), MANUFACTURER_QUECTEL, STRLEN(MANUFACTURER_QUECTEL))) {
++    if (!strncasecmp(ast_str_buffer(response), MANUFACTURER_QUECTEL, STRLEN(MANUFACTURER_QUECTEL)) ||
++        !strncasecmp(ast_str_buffer(response), MANUFACTURER_BAIWANG, STRLEN(MANUFACTURER_BAIWANG))) {
+         ast_verb(1, "[%s] Quectel module\n", PVT_ID(pvt));
+         pvt->is_simcom = 0;
+         pvt->has_voice = 0;

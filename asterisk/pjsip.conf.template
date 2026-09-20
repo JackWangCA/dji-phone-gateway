@@ -9,10 +9,12 @@ bind=0.0.0.0:5060
 
 [trusted-lan]
 type=acl
-acl=192.168.0.0/16
-acl=10.0.0.0/8
-acl=172.16.0.0/12
-acl=fd00::/8
+deny=0.0.0.0/0
+permit=192.168.0.0/16
+permit=10.0.0.0/8
+permit=172.16.0.0/12
+deny=::/0
+permit=fd00::/8
 
 [iphone]
 type=endpoint
@@ -39,4 +41,3 @@ type=aor
 max_contacts=2
 remove_existing=yes
 qualify_frequency=30
-

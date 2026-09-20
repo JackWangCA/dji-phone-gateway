@@ -1,0 +1,18 @@
+[Unit]
+Description=Asterisk PBX
+After=network.target
+
+[Service]
+Type=simple
+User=asterisk
+Group=asterisk
+RuntimeDirectory=asterisk
+RuntimeDirectoryMode=0750
+ExecStart=/usr/sbin/asterisk -f -U asterisk -G asterisk
+ExecReload=/usr/sbin/asterisk -rx 'core reload'
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

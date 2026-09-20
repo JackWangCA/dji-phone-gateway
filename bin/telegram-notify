@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sqlite3
 import sys
 import urllib.parse
 import urllib.request
@@ -21,6 +22,23 @@ sender = agi_variable("CALLERID(num)") or "unknown"
 message = agi_variable("SMS_TEXT")
 token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+settings_path = os.environ.get("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json")
+try:
+    with open(settings_path, encoding="utf-8") as stream:
+        settings = json.load(stream)
+    token = str(settings.get("telegram_bot_token") or token)
+    chat = str(settings.get("telegram_chat_id") or chat)
+except (FileNotFoundError, OSError, json.JSONDecodeError):
+    pass
+
+database = os.environ.get("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3")
+try:
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, received_at TEXT DEFAULT CURRENT_TIMESTAMP, sender TEXT NOT NULL, body TEXT NOT NULL)")
+        db.execute("INSERT INTO messages(sender, body) VALUES (?, ?)", (sender, message))
+except sqlite3.Error:
+    pass
+
 if not token or not chat:
     raise SystemExit(1)
 payload = urllib.parse.urlencode({"chat_id": chat, "text": f"SMS from {sender}\n{message}"}).encode()
