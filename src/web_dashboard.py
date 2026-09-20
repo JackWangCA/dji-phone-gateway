@@ -120,7 +120,7 @@ label{{display:block;margin:17px 0 7px;font-size:.75rem;font-weight:700;letter-s
 <div class="control-grid"><section class="panel"><div class="section-head"><span class="section-no">01</span><h2>Cellular data</h2></div><p class="hint">Mobile data stays off unless you enable it here.</p>
 <form method="post" action="/data"><input type="hidden" name="csrf" value="{CSRF_TOKEN}"><div class="actions"><button name="state" value="off" class="secondary">Data off</button><button name="state" value="on" class="danger">Data on</button></div></form></section>
 <section class="panel"><div class="section-head"><span class="section-no">02</span><h2>Telegram setup</h2></div><p class="hint">Paste the token from @BotFather. Your saved token is never displayed.</p>
-<form method="post" action="/telegram"><input type="hidden" name="csrf" value="{CSRF_TOKEN}"><label>Bot token</label><input type="password" name="token" placeholder="{'Saved — leave blank to keep it' if token_set else '123456:ABC…'}" autocomplete="off"><label>Authorized chat ID</label><input name="chat_id" value="{html.escape(str(chat_id))}" inputmode="numeric"><div class="actions"><button name="action" value="save">Save &amp; send test</button><button name="action" value="discover" class="secondary">Find chat IDs</button></div></form></section>
+<form method="post" action="/telegram"><input type="hidden" name="csrf" value="{CSRF_TOKEN}"><label>Bot token</label><input type="password" name="token" placeholder="{'Saved — leave blank to keep it' if token_set else '123456:ABC…'}" autocomplete="off"><label>Authorized chat ID</label><input name="chat_id" value="{html.escape(str(chat_id))}" inputmode="numeric"><div class="actions"><button name="action" value="save">Save settings</button><button name="action" value="test" class="secondary">Send test</button><button name="action" value="discover" class="secondary">Find chat IDs</button></div></form></section>
 <section class="panel"><div class="section-head"><span class="section-no">03</span><h2>Send SMS</h2></div><p class="hint">Send a text through the connected cellular number.</p><form method="post" action="/sms"><input type="hidden" name="csrf" value="{CSRF_TOKEN}"><label>Phone number</label><input name="number" placeholder="+15551234567"><label>Message</label><input name="message" maxlength="670"><div class="actions"><button>Send SMS</button></div></form></section></div>
 <section class="inbox"><div class="section-head"><span class="section-no">04</span><h2>Received SMS</h2></div><div class="table-wrap"><table><thead><tr><th>Received</th><th>From</th><th>Message</th></tr></thead><tbody id="sms-inbox">{rows}</tbody></table></div></section>
 <script>
@@ -250,12 +250,17 @@ class Handler(BaseHTTPRequestHandler):
                             label = chat.get("title") or " ".join(x for x in (chat.get("first_name"), chat.get("last_name")) if x) or chat.get("username") or "Telegram chat"
                             found[int(chat["id"])] = {"id": int(chat["id"]), "label": label}
                     self.respond(page(f"Connected to @{identity.get('username', 'bot')}. Select a chat ID below.", list(found.values())))
+                elif form.get("action") == "test":
+                    chat_id = int(form.get("chat_id", "").strip() or settings.get("telegram_chat_id", 0))
+                    if not chat_id:
+                        raise ValueError("Enter the authorized chat ID before sending a test.")
+                    tg.send(chat_id, "Test message: Telegram notifications are working.")
+                    self.respond(page(f"Test notification sent through @{identity.get('username', 'bot')}."))
                 else:
                     chat_id = int(form.get("chat_id", "").strip())
-                    tg.send(chat_id, "DJI phone gateway connected successfully.")
                     save_settings(token, chat_id)
                     run(["sudo", "-n", "/usr/bin/systemctl", "restart", "dji-sms-bridge.service"], 15)
-                    self.respond(page(f"Telegram connected to @{identity.get('username', 'bot')} and test message sent."))
+                    self.respond(page(f"Telegram settings saved for @{identity.get('username', 'bot')}."))
             elif self.path == "/sms":
                 number = form.get("number", "").strip()
                 message = safe_sms(form.get("message", ""))
