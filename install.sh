@@ -16,7 +16,7 @@ echo "Installing OS packages..."
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential cmake git libasound2-dev libsqlite3-dev libjansson-dev \
-    pkg-config python3 curl usbutils nftables network-manager sudo wget patch \
+    pkg-config python3 curl usbutils nftables network-manager modemmanager libqmi-utils sudo wget patch \
     libssl-dev libncurses-dev libnewt-dev libxml2-dev uuid-dev libedit-dev \
     libsrtp2-dev libspandsp-dev libcurl4-openssl-dev libcap-dev python3-dev
 
@@ -96,6 +96,7 @@ install -m 0755 "$src_dir/bin/telegram-notify" "$asterisk_agidir/telegram-notify
 install -m 0644 "$src_dir/asterisk/quectel.conf" /etc/asterisk/quectel.conf
 install -m 0644 "$src_dir/asterisk/extensions.conf" /etc/asterisk/extensions.conf
 install -m 0644 "$src_dir/udev/99-dji-eg25.rules" /etc/udev/rules.d/99-dji-eg25.rules
+printf 'qmi_wwan\n' > /etc/modules-load.d/dji-qmi.conf
 install -m 0644 "$src_dir/systemd/dji-sms-bridge.service" /etc/systemd/system/dji-sms-bridge.service
 install -m 0644 "$src_dir/systemd/dji-data-off.service" /etc/systemd/system/dji-data-off.service
 install -m 0644 "$src_dir/systemd/dji-dashboard.service" /etc/systemd/system/dji-dashboard.service
@@ -136,6 +137,12 @@ fi
 chmod 0640 "$config_root/gateway.env"
 chown root:asterisk "$config_root/gateway.env"
 
+cellular_apn=$(sed -n 's/^CELLULAR_APN=//p' "$config_root/gateway.env" | tail -n 1)
+cellular_connection=$(sed -n 's/^CELLULAR_CONNECTION=//p' "$config_root/gateway.env" | tail -n 1)
+if [ -n "$cellular_apn" ] && ! nmcli -t -f NAME connection show | grep -Fxq "${cellular_connection:-cellular}"; then
+    nmcli connection add type gsm ifname '*' con-name "${cellular_connection:-cellular}" apn "$cellular_apn" connection.autoconnect no
+fi
+
 # AGI inherits Asterisk's environment, not the bridge service EnvironmentFile.
 install -d -m 0755 /etc/systemd/system/asterisk.service.d
 cat > /etc/systemd/system/asterisk.service.d/dji-gateway.conf <<EOF
@@ -145,8 +152,11 @@ EOF
 
 udevadm control --reload-rules
 udevadm trigger
+modprobe qmi_wwan 2>/dev/null || true
 systemctl daemon-reload
 systemctl enable asterisk dji-data-off.service dji-sms-bridge.service dji-dashboard.service
+systemctl enable ModemManager.service
+systemctl restart ModemManager.service
 systemctl restart asterisk
 systemctl start dji-data-off.service
 systemctl restart dji-dashboard.service

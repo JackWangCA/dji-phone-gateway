@@ -20,6 +20,14 @@ block_data() {
 
 case "$operation" in
     on)
+        if ! nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq "$connection"; then
+            echo "Cellular profile '$connection' does not exist. Configure CELLULAR_APN and create the NetworkManager GSM profile first." >&2
+            exit 1
+        fi
+        if [ ! -e "/sys/class/net/$interface" ]; then
+            echo "Cellular interface '$interface' is unavailable. Confirm the modem is in Quectel/QMI USB mode." >&2
+            exit 1
+        fi
         ensure_table
         nft flush chain inet "$table" output
         nmcli connection up "$connection"
@@ -41,4 +49,3 @@ case "$operation" in
         ;;
     *) echo "Usage: $0 {on|off|status}" >&2; exit 2 ;;
 esac
-

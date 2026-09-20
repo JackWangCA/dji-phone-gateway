@@ -75,9 +75,10 @@ The modem reboots. Then inspect `aplay -l`, restart Asterisk, and rerun diagnost
 ```ini
 CELLULAR_CONNECTION=cellular
 WWAN_INTERFACE=wwan0
+CELLULAR_APN=Wholesale
 ```
 
-Create the NetworkManager profile separately for your carrier/APN. The service deliberately never guesses an APN. Call/SMS registration does not require a NetworkManager data session.
+Set `CELLULAR_APN` to the value supplied by your carrier. The installer creates a non-autoconnecting NetworkManager GSM profile when this value is present; it deliberately never guesses an APN. Call/SMS registration does not require a NetworkManager data session.
 
 ## Security
 

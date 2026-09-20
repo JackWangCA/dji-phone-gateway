@@ -1,4 +1,5 @@
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2ca3", ATTR{idProduct}=="4006", RUN+="/sbin/modprobe option", RUN+="/bin/sh -c 'echo 2ca3 4006 > /sys/bus/usb-serial/drivers/option1/new_id'"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2c7c", ATTRS{idProduct}=="0125", ENV{ID_USB_INTERFACE_NUM}=="02", SYMLINK+="dji-modem-at", GROUP="asterisk", MODE="0660"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2c7c", ATTRS{idProduct}=="0125", ENV{ID_USB_INTERFACE_NUM}=="01", SYMLINK+="dji-modem-audio", GROUP="asterisk", MODE="0660", ENV{ID_MM_PORT_IGNORE}="1"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2c7c", ATTRS{idProduct}=="0125", ENV{ID_USB_INTERFACE_NUM}=="02", SYMLINK+="dji-modem-at", GROUP="asterisk", MODE="0660", ENV{ID_MM_PORT_IGNORE}="1"
 SUBSYSTEM=="tty", ATTRS{idVendor}=="2ca3", ATTRS{idProduct}=="4006", ENV{ID_USB_INTERFACE_NUM}=="03", SYMLINK+="dji-modem-at", GROUP="asterisk", MODE="0660"
 SUBSYSTEM=="tty", ATTRS{idVendor}=="2ca3", ATTRS{idProduct}=="4006", ENV{ID_USB_INTERFACE_NUM}=="01", SYMLINK+="dji-modem-audio", GROUP="asterisk", MODE="0660"
