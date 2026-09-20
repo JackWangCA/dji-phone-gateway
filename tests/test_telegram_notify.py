@@ -11,6 +11,27 @@ SCRIPT = pathlib.Path(__file__).parents[1] / "bin" / "telegram-notify"
 
 
 class IncomingSmsTests(unittest.TestCase):
+    def test_notification_is_compact_and_siri_friendly(self):
+        result = subprocess.run(
+            [str(SCRIPT), "--format-preview", "+15551234567", "I’ll be there in ten minutes."],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "+1 (555) 123-4567: I’ll be there in ten minutes.")
+
+    def test_unknown_sender_and_empty_message_are_spoken_naturally(self):
+        result = subprocess.run(
+            [str(SCRIPT), "--format-preview", "unknown", ""],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.stdout.strip(), "Unknown number: Empty message")
+
     def test_json_payload_is_stored_without_telegram(self):
         with tempfile.TemporaryDirectory() as directory:
             database = pathlib.Path(directory) / "messages.sqlite3"
