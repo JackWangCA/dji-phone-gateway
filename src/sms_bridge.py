@@ -98,7 +98,8 @@ def ami_command(cfg: Config, command: str) -> str:
             if not data:
                 break
             chunks.append(data.decode(errors="replace"))
-            if "--END COMMAND--" in chunks[-1]:
+            response = "".join(chunks)
+            if "--END COMMAND--" in response or response.endswith("\r\n\r\n"):
                 break
         sock.sendall(packet({"Action": "Logoff"}))
     return "".join(chunks)
@@ -148,7 +149,7 @@ def handle(cfg: Config, tg: Telegram, chat_id: int, text: str) -> None:
             tg.send(chat_id, "SMS is too long (maximum 670 characters).")
             return
         output = ami_command(cfg, f"quectel sms send {cfg.modem} {args[0]} {message}")
-        tg.send(chat_id, "SMS queued." if "error" not in output.lower() else "SMS failed:\n" + output[-1500:])
+        tg.send(chat_id, "SMS queued." if "SMS queued for send" in output else "SMS failed:\n" + output[-1500:])
     elif command == "/status":
         modem = ami_command(cfg, f"quectel show device status {cfg.modem}")
         data = run_data(cfg, "status")

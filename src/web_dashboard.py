@@ -214,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Message is too long (maximum 670 characters).")
                 cfg = bridge_config()
                 output = ami_command(cfg, f"quectel sms send {cfg.modem} {number} {message}")
-                if "error" in output.lower():
+                if "SMS queued for send" not in output:
                     raise RuntimeError(output[-1200:])
                 self.respond(page("SMS queued."))
             else:
