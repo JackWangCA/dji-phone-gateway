@@ -9,6 +9,7 @@ import os
 import re
 import shlex
 import socket
+import sqlite3
 import subprocess
 import time
 import urllib.error
@@ -36,6 +37,7 @@ class Config:
     modem: str = "quectel0"
     data_command: str = "/opt/dji-phone-gateway/bin/dji-data"
     poll_timeout: int = 25
+    sms_database: str = "/var/lib/dji-phone-gateway/messages.sqlite3"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -63,6 +65,7 @@ class Config:
             modem=os.getenv("MODEM_NAME", "quectel0"),
             data_command=os.getenv("DATA_COMMAND", "/opt/dji-phone-gateway/bin/dji-data"),
             poll_timeout=max(5, min(50, int(os.getenv("POLL_TIMEOUT", "25")))),
+            sms_database=os.getenv("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3"),
         )
 
 
@@ -142,13 +145,40 @@ def run_data(cfg: Config, operation: str) -> str:
     return output
 
 
-def handle(cfg: Config, tg: Telegram, chat_id: int, text: str) -> None:
+def resolve_reply_target(cfg: Config, chat_id: int, reply_message_id: int | None) -> str | None:
+    """Resolve an exact quoted SMS, or the latest SMS when no quote was used."""
+    try:
+        with sqlite3.connect(f"file:{cfg.sms_database}?mode=ro", uri=True, timeout=2) as db:
+            if reply_message_id is not None:
+                row = db.execute(
+                    "SELECT sender FROM telegram_reply_targets WHERE chat_id = ? AND message_id = ?",
+                    (chat_id, reply_message_id),
+                ).fetchone()
+            else:
+                row = db.execute(
+                    "SELECT sender FROM telegram_reply_targets WHERE chat_id = ? "
+                    "ORDER BY created_at DESC, message_id DESC LIMIT 1",
+                    (chat_id,),
+                ).fetchone()
+    except sqlite3.Error as exc:
+        LOG.warning("could not resolve Telegram SMS reply target: %s", exc)
+        return None
+    return str(row[0]) if row else None
+
+
+def queue_sms(cfg: Config, number: str, message: str) -> tuple[bool, str]:
+    output = ami_command(cfg, f"quectel sms send {cfg.modem} {number} {message}")
+    return "SMS queued for send" in output, output
+
+
+def handle(cfg: Config, tg: Telegram, chat_id: int, text: str, reply_message_id: int | None = None) -> None:
     if chat_id != cfg.chat_id:
         LOG.warning("ignored update from unauthorized chat %s", chat_id)
         return
-    command, args = parse_command(text)
+    stripped = text.strip()
+    command, args = parse_command(stripped) if stripped.startswith("/") else ("", [])
     if command in ("/start", "/help"):
-        tg.send(chat_id, "Commands:\n/sms <number> <message>\n/status\n/data_on\n/data_off")
+        tg.send(chat_id, "Reply to a forwarded text to answer it. A plain message answers the most recent sender.\n\nCommands:\n/sms <number> <message>\n/status\n/data_on\n/data_off")
     elif command == "/sms":
         if len(args) < 2 or not safe_phone(args[0]):
             tg.send(chat_id, "Usage: /sms +15551234567 message")
@@ -157,8 +187,8 @@ def handle(cfg: Config, tg: Telegram, chat_id: int, text: str) -> None:
         if len(message) > 670:
             tg.send(chat_id, "SMS is too long (maximum 670 characters).")
             return
-        output = ami_command(cfg, f"quectel sms send {cfg.modem} {args[0]} {message}")
-        tg.send(chat_id, "SMS queued." if "SMS queued for send" in output else "SMS failed:\n" + output[-1500:])
+        queued, output = queue_sms(cfg, args[0], message)
+        tg.send(chat_id, f"SMS queued to {args[0]}." if queued else "SMS failed:\n" + output[-1500:])
     elif command == "/status":
         modem = ami_command(cfg, f"quectel show device status {cfg.modem}")
         data = run_data(cfg, "status")
@@ -168,6 +198,23 @@ def handle(cfg: Config, tg: Telegram, chat_id: int, text: str) -> None:
         tg.send(chat_id, run_data(cfg, state))
     elif command:
         tg.send(chat_id, "Unknown command. Use /help.")
+    elif stripped:
+        target = resolve_reply_target(cfg, chat_id, reply_message_id)
+        if not target:
+            if reply_message_id is not None:
+                tg.send(chat_id, "That forwarded message is too old or is not linked to an SMS.")
+            else:
+                tg.send(chat_id, "No recent incoming SMS is available to reply to.")
+            return
+        if not safe_phone(target):
+            tg.send(chat_id, "The sender number cannot receive an SMS reply.")
+            return
+        message = safe_sms(stripped)
+        if len(message) > 670:
+            tg.send(chat_id, "SMS is too long (maximum 670 characters).")
+            return
+        queued, output = queue_sms(cfg, target, message)
+        tg.send(chat_id, f"SMS queued to {target}." if queued else "SMS failed:\n" + output[-1500:])
 
 
 def main() -> None:
@@ -183,7 +230,9 @@ def main() -> None:
                 offset = max(offset, int(update["update_id"]) + 1)
                 msg = update.get("message", {})
                 if "text" in msg and "chat" in msg:
-                    handle(cfg, tg, int(msg["chat"]["id"]), msg["text"])
+                    reply = msg.get("reply_to_message", {})
+                    reply_message_id = int(reply["message_id"]) if "message_id" in reply else None
+                    handle(cfg, tg, int(msg["chat"]["id"]), msg["text"], reply_message_id)
             delay = 1
         except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError) as exc:
             LOG.error("bridge loop: %s", exc)

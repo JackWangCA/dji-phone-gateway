@@ -1,7 +1,10 @@
 import importlib.util
 import pathlib
+import sqlite3
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 PATH = pathlib.Path(__file__).parents[1] / "src" / "sms_bridge.py"
 spec = importlib.util.spec_from_file_location("sms_bridge", PATH)
@@ -33,6 +36,40 @@ class ParsingTests(unittest.TestCase):
                 raise AssertionError("must not reply to unauthorized users")
         cfg = bridge.Config("token", 42, "user", "password")
         bridge.handle(cfg, Telegram(), 7, "/help")
+
+    def test_quoted_and_unquoted_replies_resolve_the_right_sender(self):
+        class Telegram:
+            def __init__(self):
+                self.messages = []
+
+            def send(self, _chat_id, text):
+                self.messages.append(text)
+
+        with tempfile.TemporaryDirectory() as directory:
+            database = str(pathlib.Path(directory) / "messages.sqlite3")
+            with sqlite3.connect(database) as db:
+                db.execute(
+                    "CREATE TABLE telegram_reply_targets (message_id INTEGER, chat_id INTEGER, "
+                    "sender TEXT, created_at TEXT, PRIMARY KEY(message_id, chat_id))"
+                )
+                db.execute(
+                    "INSERT INTO telegram_reply_targets VALUES (101, 42, '+15551234567', '2026-09-20 10:00:00')"
+                )
+                db.execute(
+                    "INSERT INTO telegram_reply_targets VALUES (102, 42, '+15557654321', '2026-09-20 10:01:00')"
+                )
+            cfg = bridge.Config("token", 42, "user", "password", sms_database=database)
+            tg = Telegram()
+            with mock.patch.object(bridge, "queue_sms", return_value=(True, "SMS queued for send")) as queue:
+                bridge.handle(cfg, tg, 42, "Quoted reply", reply_message_id=101)
+                bridge.handle(cfg, tg, 42, "Latest reply")
+
+            self.assertEqual(queue.call_args_list[0].args[1:], ("+15551234567", "Quoted reply"))
+            self.assertEqual(queue.call_args_list[1].args[1:], ("+15557654321", "Latest reply"))
+            self.assertEqual(
+                tg.messages,
+                ["SMS queued to +15551234567.", "SMS queued to +15557654321."],
+            )
 
 
 if __name__ == "__main__":

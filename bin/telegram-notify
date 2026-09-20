@@ -26,6 +26,20 @@ def telegram_notification(sender, message):
     return f"{friendly_sender(sender)}: {body}"
 
 
+def save_reply_target(database, message_id, chat_id, sender):
+    """Link a Telegram notification to the cellular number that sent it."""
+    with sqlite3.connect(database) as db:
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS telegram_reply_targets ("
+            "message_id INTEGER NOT NULL, chat_id INTEGER NOT NULL, sender TEXT NOT NULL, "
+            "created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(message_id, chat_id))"
+        )
+        db.execute(
+            "INSERT OR REPLACE INTO telegram_reply_targets(message_id, chat_id, sender) VALUES (?, ?, ?)",
+            (int(message_id), int(chat_id), sender),
+        )
+
+
 def agi_variable(name):
     print(f"GET VARIABLE {name}", flush=True)
     response = sys.stdin.readline().strip()
@@ -84,8 +98,15 @@ def main():
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)
     try:
         with urllib.request.urlopen(req, timeout=15) as response:
-            if not json.load(response).get("ok"):
+            telegram_result = json.load(response)
+            if not telegram_result.get("ok"):
                 raise RuntimeError("Telegram returned an error")
+        telegram_message_id = telegram_result.get("result", {}).get("message_id")
+        if telegram_message_id is not None:
+            try:
+                save_reply_target(database, telegram_message_id, chat, sender)
+            except (sqlite3.Error, TypeError, ValueError) as exc:
+                agi_verbose(f"DJI gateway: could not save Telegram reply target: {exc}", 2)
         agi_verbose(f"DJI gateway: forwarded inbound SMS from {sender} to Telegram")
     except (OSError, RuntimeError, json.JSONDecodeError) as exc:
         agi_verbose(f"DJI gateway: Telegram forwarding failed: {exc}", 2)

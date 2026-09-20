@@ -5,12 +5,31 @@ import sqlite3
 import subprocess
 import tempfile
 import unittest
+import importlib.machinery
+import importlib.util
 
 
 SCRIPT = pathlib.Path(__file__).parents[1] / "bin" / "telegram-notify"
+LOADER = importlib.machinery.SourceFileLoader("telegram_notify", str(SCRIPT))
+SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
+notify = importlib.util.module_from_spec(SPEC)
+LOADER.exec_module(notify)
 
 
 class IncomingSmsTests(unittest.TestCase):
+    def test_telegram_message_id_is_linked_to_sender(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = pathlib.Path(directory) / "messages.sqlite3"
+            notify.save_reply_target(database, 51, -42, "+15551234567")
+
+            with sqlite3.connect(database) as db:
+                self.assertEqual(
+                    db.execute(
+                        "SELECT message_id, chat_id, sender FROM telegram_reply_targets"
+                    ).fetchall(),
+                    [(51, -42, "+15551234567")],
+                )
+
     def test_notification_is_compact_and_siri_friendly(self):
         result = subprocess.run(
             [str(SCRIPT), "--format-preview", "+15551234567", "I’ll be there in ten minutes."],
