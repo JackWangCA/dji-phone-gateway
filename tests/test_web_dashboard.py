@@ -86,7 +86,14 @@ class ConversationTests(unittest.TestCase):
         self.assertIn("/api/access", document)
         self.assertIn("preserveScroll", document)
         self.assertIn("touch-action:pan-y", document)
+        self.assertIn('data-view="conversations" aria-selected="true"', document)
+        self.assertIn("location.hash==='#dashboard'?'dashboard':'conversations'", document)
+        self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"', document)
         self.assertNotIn("@@", document)
+
+    def test_home_screen_icon_assets_exist(self):
+        self.assertTrue((dashboard.ASSET_DIR / "dji-phone-gateway-icon.svg").is_file())
+        self.assertTrue((dashboard.ASSET_DIR / "apple-touch-icon.png").is_file())
 
 
 if __name__ == "__main__":

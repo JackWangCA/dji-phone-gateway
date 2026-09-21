@@ -29,6 +29,7 @@ PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 SETTINGS_PATH = Path(os.getenv("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json"))
 SMS_DATABASE = Path(os.getenv("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3"))
+ASSET_DIR = Path(__file__).resolve().parent
 CSRF_TOKEN = secrets.token_urlsafe(32)
 SETTINGS_LOCK = threading.Lock()
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
@@ -193,7 +194,7 @@ def send_sms(number: str, body: str) -> dict[str, object]:
 
 HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DJI Phone Gateway</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23fff'/%3E%3Crect width='15' height='64' fill='%23E4002B'/%3E%3Cpath d='M24 18h27v28H24z' fill='none' stroke='%23000' stroke-width='5'/%3E%3C/svg%3E"><style>
+<title>DJI Phone Gateway</title><meta name="theme-color" content="#ffffff"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="DJI Messages"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><style>
 :root{--paper:#fff;--field:#f7f7f8;--ink:#111;--muted:#686868;--accent:#e4002b;--line:#c9c9c9}
 *{box-sizing:border-box}[hidden]{display:none!important}html{background:var(--paper)}body{margin:0;color:var(--ink);background:var(--paper);font:16px/1.4 "Helvetica Neue",Helvetica,Arial,sans-serif}button,input,textarea{font:inherit}button{border-radius:0}main{max-width:1280px;margin:0 auto;padding:0 32px 72px}.masthead{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:260px;border-left:18px solid var(--accent);border-bottom:1px solid var(--ink);padding:32px 36px 22px}.brand{align-self:end;position:relative;z-index:1}h1{max-width:700px;margin:0;font-size:clamp(2.8rem,7vw,6.8rem);font-weight:700;line-height:.86;letter-spacing:-.075em}.host{margin:18px 0 0;font-size:.875rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}.folio{align-self:start;margin-top:-19px;font-size:clamp(8rem,20vw,17rem);font-weight:700;line-height:.8;letter-spacing:-.11em;color:var(--field);user-select:none}
 .primary-nav{display:flex;border-bottom:1px solid var(--ink)}.nav-tab{min-width:180px;border:0;border-right:1px solid var(--ink);background:var(--paper);color:var(--ink);padding:15px 20px;text-align:left;font-weight:700;cursor:pointer}.nav-tab[aria-selected="true"]{background:var(--ink);color:#fff}.nav-tab:hover,.nav-tab:focus-visible{background:var(--accent);color:#fff;outline:0}.notice{margin:0;border-bottom:1px solid var(--ink);padding:18px 36px;background:var(--accent);color:#fff;font-weight:700}.notice ul{margin:10px 0 0;padding-left:20px}code{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums}.view[hidden]{display:none}
@@ -206,7 +207,7 @@ dialog{width:min(540px,calc(100% - 28px));border:1px solid var(--ink);border-rad
 @media(max-width:620px){main{padding:0 14px 40px}.masthead{display:block;min-height:230px;padding:24px 18px 18px;overflow:hidden}.brand{position:absolute;left:18px;right:14px;bottom:20px}.folio{position:absolute;right:10px;top:15px;margin:0;font-size:8.4rem}h1{font-size:3rem;max-width:300px}.host{font-size:.7rem}.primary-nav{display:grid;grid-template-columns:1fr 1fr}.nav-tab{min-width:0}.status-grid{grid-template-columns:1fr}.status-item,.status-item:nth-child(even),.status-item:last-child{min-height:92px;border-right:0}.status-label{min-height:auto}.status-value{margin-top:10px}.section-head{grid-template-columns:48px 1fr auto}.data-readout{grid-template-columns:1fr;gap:6px}.conversation-shell{display:block;height:auto;min-height:0}.conversation-index{max-height:270px;border-right:0;border-bottom:1px solid var(--ink)}.thread{height:560px}.index-label{height:54px}.thread-head{height:66px}.message-stream{padding:18px 12px}.message{max-width:92%}.composer{grid-template-columns:1fr}.composer .button{min-height:52px;border-width:1px 0 0}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
 </style></head><body><main><header class="masthead"><div class="brand"><h1>DJI Phone Gateway</h1><p class="host">Private cellular gateway · smspi</p></div><div class="folio" aria-hidden="true">4G</div></header>
-<nav class="primary-nav" aria-label="Gateway sections"><button class="nav-tab" data-view="dashboard" aria-selected="true">Dashboard</button><button class="nav-tab" data-view="conversations" aria-selected="false">Conversations</button></nav>
+<nav class="primary-nav" aria-label="Gateway sections"><button class="nav-tab" data-view="dashboard" aria-selected="false">Dashboard</button><button class="nav-tab" data-view="conversations" aria-selected="true">Conversations</button></nav>
 @@BANNER@@@@CHATS@@
 <div id="dashboard-view" class="view"><section class="status-block"><div class="section-head"><span class="section-no">00</span><h2>Gateway status</h2></div><div class="status-grid">@@STATUS@@</div><div class="data-readout"><span>Data</span><code>@@DATA_STATUS@@</code></div></section>
 <div class="control-grid"><section class="panel"><div class="section-head"><span class="section-no">01</span><h2>Cellular data</h2></div><p class="hint">Mobile data stays off unless you enable it here.</p><form method="post" action="/data"><input type="hidden" name="csrf" value="@@CSRF@@"><div class="actions"><button class="button secondary" name="state" value="off">Data off</button><button class="button danger" name="state" value="on">Data on</button></div></form></section>
@@ -228,7 +229,7 @@ async function transmit(number,body){const data=new URLSearchParams({csrf,number
 replyForm.addEventListener('submit',async event=>{event.preventDefault();const textarea=replyForm.elements.message,body=textarea.value.trim();if(!body||!selectedPeer)return;sendError.hidden=true;const temporary={id:Date.now(),timestamp:new Date().toISOString(),peer:selectedPeer,body,direction:'outgoing',pending:true};allMessages.push(temporary);textarea.value='';selectPeer(selectedPeer,new Set([temporary.id]));try{const saved=await transmit(selectedPeer,body);allMessages=allMessages.filter(message=>message!==temporary);allMessages.push(saved);knownIds.add(saved.id);selectPeer(selectedPeer,new Set([saved.id]))}catch(error){allMessages=allMessages.filter(message=>message!==temporary);selectPeer(selectedPeer);sendError.textContent=error.message;sendError.hidden=false}});
 const dialog=document.getElementById('new-dialog'),newForm=document.getElementById('new-form');document.getElementById('new-message').addEventListener('click',()=>dialog.showModal());document.querySelector('.dialog-close').addEventListener('click',()=>dialog.close());document.querySelector('.cancel-new').addEventListener('click',()=>dialog.close());newForm.addEventListener('submit',async event=>{event.preventDefault();const number=newForm.elements.number.value.trim(),body=newForm.elements.message.value.trim(),submit=newForm.querySelector('button');submit.disabled=true;try{const saved=await transmit(number,body);allMessages.push(saved);knownIds.add(saved.id);newForm.reset();dialog.close();selectPeer(saved.peer,new Set([saved.id]));switchView('conversations')}catch(error){alert(error.message)}finally{submit.disabled=false}});
 const accessForm=document.getElementById('access-form'),accessStatus=document.getElementById('access-status');accessForm.addEventListener('submit',async event=>{event.preventDefault();accessStatus.hidden=true;const data=new URLSearchParams({csrf,username:accessForm.elements.username.value,password:accessForm.elements.password.value,confirmation:accessForm.elements.confirmation.value});const response=await fetch('/api/access',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data});const result=await response.json();if(!response.ok){accessStatus.textContent=result.error||'Login could not be changed.';accessStatus.hidden=false;return}accessStatus.textContent='Login changed. Sign in again with the new credentials.';accessStatus.hidden=false;accessForm.elements.password.value='';accessForm.elements.confirmation.value='';setTimeout(()=>location.reload(),1200)});
-renderList();if(location.hash==='#conversations')switchView('conversations');setInterval(fetchMessages,4000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')fetchMessages()});
+renderList();switchView(location.hash==='#dashboard'?'dashboard':'conversations');setInterval(fetchMessages,4000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')fetchMessages()});
 </script></main></body></html>"""
 
 
@@ -269,6 +270,20 @@ def page(message: str = "", discovered: list[dict] | None = None) -> str:
 class Handler(BaseHTTPRequestHandler):
     server_version = "DJIGateway/1.0"
 
+    def respond_asset(self, filename: str, content_type: str) -> None:
+        try:
+            body = (ASSET_DIR / filename).read_bytes()
+        except OSError:
+            self.send_error(404)
+            return
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def authorized(self) -> bool:
         header = self.headers.get("Authorization", "")
         try:
@@ -288,7 +303,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.UNAUTHORIZED); self.send_header("WWW-Authenticate", 'Basic realm="DJI Phone Gateway"'); self.send_header("Content-Length", "0"); self.end_headers(); return False
 
     def respond(self, content: str, status: int = 200) -> None:
-        body = content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        body = content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
     def respond_json(self, value: object, status: int = 200) -> None:
         body = json.dumps(value).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -297,8 +312,14 @@ class Handler(BaseHTTPRequestHandler):
         length = min(int(self.headers.get("Content-Length", "0")), 16384); values = urllib.parse.parse_qs(self.rfile.read(length).decode(errors="replace"), keep_blank_values=True); return {key: items[-1] for key, items in values.items()}
 
     def do_GET(self) -> None:
-        if not self.authenticate(): return
         path = urllib.parse.urlsplit(self.path).path
+        if path == "/icon.svg":
+            self.respond_asset("dji-phone-gateway-icon.svg", "image/svg+xml")
+            return
+        if path == "/apple-touch-icon.png":
+            self.respond_asset("apple-touch-icon.png", "image/png")
+            return
+        if not self.authenticate(): return
         if path == "/": self.respond(page())
         elif path == "/messages": self.respond_json(messages())
         else: self.send_error(404)

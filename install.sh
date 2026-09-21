@@ -102,6 +102,8 @@ install -m 0755 "$src_dir/bin/dji-data" "$install_root/bin/dji-data"
 install -m 0755 "$src_dir/bin/dji-gateway-diag" "$install_root/bin/dji-gateway-diag"
 install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"
 install -m 0755 "$src_dir/src/web_dashboard.py" "$install_root/src/web_dashboard.py"
+install -m 0644 "$src_dir/src/dji-phone-gateway-icon.svg" "$install_root/src/dji-phone-gateway-icon.svg"
+install -m 0644 "$src_dir/src/apple-touch-icon.png" "$install_root/src/apple-touch-icon.png"
 asterisk_agidir=$(pkg-config --variable=agidir asterisk)
 install -d -o asterisk -g asterisk -m 0755 "$asterisk_agidir"
 install -m 0755 "$src_dir/bin/telegram-notify" "$asterisk_agidir/telegram-notify"
