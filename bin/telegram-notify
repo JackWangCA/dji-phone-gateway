@@ -100,6 +100,14 @@ def main():
                 "INSERT INTO messages(sender, body, direction) VALUES (?, ?, 'incoming')",
                 (sender, message),
             )
+        # Asterisk owns newly created databases. Keep them writable by the
+        # shared asterisk group used by the dashboard and Telegram bridge.
+        try:
+            os.chmod(database, 0o660)
+        except OSError:
+            # A database first created by the dashboard is owned by djigateway,
+            # but its service umask already gives this shared group write access.
+            pass
         agi_verbose(f"DJI gateway: stored inbound SMS from {sender}")
     except sqlite3.Error as exc:
         agi_verbose(f"DJI gateway: failed to store inbound SMS: {exc}", 3)

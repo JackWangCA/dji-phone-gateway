@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=asterisk
 Group=asterisk
+UMask=0007
 RuntimeDirectory=asterisk
 RuntimeDirectoryMode=0750
 ExecStart=/usr/sbin/asterisk -f -U asterisk -G asterisk

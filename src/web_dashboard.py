@@ -11,6 +11,7 @@ import os
 import secrets
 import sqlite3
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -126,7 +127,20 @@ def send_sms(number: str, body: str) -> dict[str, object]:
     output = ami_command(cfg, f"quectel sms send {cfg.modem} {number} {body}")
     if "SMS queued for send" not in output:
         raise RuntimeError(output[-1200:])
-    return store_outgoing(number, body)
+    try:
+        return store_outgoing(number, body)
+    except sqlite3.Error as exc:
+        # The carrier send has already been accepted. Report that truthfully even
+        # if local history is temporarily unavailable, instead of inviting a
+        # duplicate retry from the user.
+        return {
+            "id": int(time.time() * 1000),
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+            "peer": number,
+            "body": body,
+            "direction": "outgoing",
+            "history_warning": f"SMS queued, but conversation history could not be updated: {exc}",
+        }
 
 
 HTML = r"""<!doctype html>
@@ -161,7 +175,7 @@ document.querySelectorAll('.nav-tab').forEach(tab=>tab.addEventListener('click',
 function renderList(){list.replaceChildren();const entries=groups();if(!entries.length){const item=document.createElement('li');item.className='conversation-row';item.textContent='No conversations yet.';list.append(item);return}for(const [peer,items] of entries){const last=items[items.length-1],item=document.createElement('li'),button=document.createElement('button');button.className='conversation-row'+(peer===selectedPeer?' active':'')+(freshPeers.has(peer)?' fresh':'');button.type='button';const top=document.createElement('span');top.className='conversation-peer';const name=document.createElement('span');name.textContent=displayNumber(peer);const time=document.createElement('span');time.className='conversation-time';time.textContent=timeLabel(last.timestamp);top.append(name,time);const preview=document.createElement('div');preview.className='conversation-preview';preview.textContent=(last.direction==='outgoing'?'You: ':'')+last.body;button.append(top,preview);button.addEventListener('click',()=>selectPeer(peer));item.append(button);list.append(item)}}
 function selectPeer(peer,animateIds=new Set()){selectedPeer=peer;freshPeers.delete(peer);document.getElementById('thread-peer').textContent=displayNumber(peer);const items=allMessages.filter(message=>message.peer===peer);document.getElementById('thread-count').textContent=`${items.length} ${items.length===1?'message':'messages'}`;stream.replaceChildren();for(const message of items){const block=document.createElement('div');block.className=`message ${message.direction}`+(message.pending?' pending':'')+(animateIds.has(message.id)?' arriving':'');const text=document.createElement('div');text.textContent=message.body;const time=document.createElement('span');time.className='message-time';time.textContent=message.pending?'Sending…':timeLabel(message.timestamp);block.append(text,time);stream.append(block)}replyForm.hidden=false;renderList();requestAnimationFrame(()=>{stream.scrollTop=stream.scrollHeight})}
 async function fetchMessages(){try{const response=await fetch('/messages',{cache:'no-store'});if(!response.ok)return;const next=await response.json(),newIds=new Set();for(const message of next){if(!knownIds.has(message.id)){newIds.add(message.id);freshPeers.add(message.peer)}}allMessages=next;knownIds=new Set(next.map(message=>message.id));renderList();if(selectedPeer)selectPeer(selectedPeer,newIds)}catch(_){}}
-async function transmit(number,body){const data=new URLSearchParams({csrf,number,message:body});const response=await fetch('/api/sms',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Message could not be sent.');return result.message}
+async function transmit(number,body){const data=new URLSearchParams({csrf,number,message:body});const response=await fetch('/api/sms',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Message could not be sent.');if(result.message.history_warning){sendError.textContent=result.message.history_warning;sendError.hidden=false}return result.message}
 replyForm.addEventListener('submit',async event=>{event.preventDefault();const textarea=replyForm.elements.message,body=textarea.value.trim();if(!body||!selectedPeer)return;sendError.hidden=true;const temporary={id:Date.now(),timestamp:new Date().toISOString(),peer:selectedPeer,body,direction:'outgoing',pending:true};allMessages.push(temporary);textarea.value='';selectPeer(selectedPeer,new Set([temporary.id]));try{const saved=await transmit(selectedPeer,body);allMessages=allMessages.filter(message=>message!==temporary);allMessages.push(saved);knownIds.add(saved.id);selectPeer(selectedPeer,new Set([saved.id]))}catch(error){allMessages=allMessages.filter(message=>message!==temporary);selectPeer(selectedPeer);sendError.textContent=error.message;sendError.hidden=false}});
 const dialog=document.getElementById('new-dialog'),newForm=document.getElementById('new-form');document.getElementById('new-message').addEventListener('click',()=>dialog.showModal());document.querySelector('.dialog-close').addEventListener('click',()=>dialog.close());document.querySelector('.cancel-new').addEventListener('click',()=>dialog.close());newForm.addEventListener('submit',async event=>{event.preventDefault();const number=newForm.elements.number.value.trim(),body=newForm.elements.message.value.trim(),submit=newForm.querySelector('button');submit.disabled=true;try{const saved=await transmit(number,body);allMessages.push(saved);knownIds.add(saved.id);newForm.reset();dialog.close();selectPeer(saved.peer,new Set([saved.id]));switchView('conversations')}catch(error){alert(error.message)}finally{submit.disabled=false}});
 renderList();if(location.hash==='#conversations')switchView('conversations');setInterval(fetchMessages,4000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')fetchMessages()});

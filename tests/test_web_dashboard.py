@@ -44,6 +44,16 @@ class ConversationTests(unittest.TestCase):
             self.assertEqual(history[0]["direction"], "outgoing")
             self.assertIn("+15551234567 Hello", ami.call_args.args[1])
 
+    def test_history_error_does_not_report_a_queued_sms_as_failed(self):
+        with (
+            mock.patch.object(dashboard, "bridge_config", return_value=mock.Mock(modem="quectel0")),
+            mock.patch.object(dashboard, "ami_command", return_value="SMS queued for send"),
+            mock.patch.object(dashboard, "store_outgoing", side_effect=sqlite3.OperationalError("readonly database")),
+        ):
+            sent = dashboard.send_sms("+15551234567", "Hello")
+        self.assertEqual(sent["direction"], "outgoing")
+        self.assertIn("history could not be updated", sent["history_warning"])
+
     def test_page_contains_separate_conversation_view(self):
         with (
             mock.patch.object(dashboard, "run", return_value=(0, "off")),

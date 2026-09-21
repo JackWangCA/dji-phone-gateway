@@ -86,6 +86,10 @@ else
 fi
 install -d -m 0755 "$install_root/bin" "$install_root/src" "$config_root"
 install -d -o djigateway -g asterisk -m 0770 /var/lib/dji-phone-gateway
+if [ -e /var/lib/dji-phone-gateway/messages.sqlite3 ]; then
+    chgrp asterisk /var/lib/dji-phone-gateway/messages.sqlite3
+    chmod 0660 /var/lib/dji-phone-gateway/messages.sqlite3
+fi
 install -m 0755 "$src_dir/bin/dji-data" "$install_root/bin/dji-data"
 install -m 0755 "$src_dir/bin/dji-gateway-diag" "$install_root/bin/dji-gateway-diag"
 install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"

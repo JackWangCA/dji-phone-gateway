@@ -9,6 +9,7 @@ EnvironmentFile=/etc/dji-phone-gateway/gateway.env
 ExecStart=/usr/bin/python3 /opt/dji-phone-gateway/src/web_dashboard.py
 User=djigateway
 Group=asterisk
+UMask=0007
 Restart=on-failure
 RestartSec=5
 # This service uses sudo only for the exact commands allowed in

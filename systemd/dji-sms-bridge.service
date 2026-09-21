@@ -11,6 +11,7 @@ ExecCondition=/bin/sh -c '[ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -s /var/lib/dji-
 ExecStart=/usr/bin/python3 /opt/dji-phone-gateway/src/sms_bridge.py
 User=djigateway
 Group=asterisk
+UMask=0007
 Restart=on-failure
 RestartSec=5
 # Telegram data controls use the same narrowly scoped sudoers rule.
