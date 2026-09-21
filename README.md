@@ -25,6 +25,32 @@ The one-time USB identity conversion (`2ca3:4006` to `2c7c:0125`) is described i
 
 ## Install
 
+### One-line release install
+
+Published releases include a checksum-verified bootstrap installer. After replacing
+`OWNER/REPOSITORY` with this project's GitHub location, a new Raspberry Pi can be
+installed with:
+
+```sh
+curl -fsSL https://github.com/OWNER/REPOSITORY/releases/latest/download/install.sh | sudo sh
+```
+
+The bootstrap downloads the matching release archive, verifies its SHA-256 digest,
+and runs the installer from that verified bundle. It accepts
+`DJI_GATEWAY_RELEASE_URL` as an override for offline mirrors and release testing.
+
+To publish a release, update `VERSION`, commit the change, and push a matching tag:
+
+```sh
+git tag v0.1.0
+git push origin main v0.1.0
+```
+
+GitHub Actions tests the project and attaches `install.sh`, the release archive,
+and its checksum to the GitHub Release automatically.
+
+### Install from a checkout
+
 Clone/copy this directory onto the Pi, then:
 
 ```sh

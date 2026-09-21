@@ -1,0 +1,31 @@
+name: Release installer
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Build release bundle
+        run: scripts/build-release.sh "${GITHUB_REF_NAME#v}" "$GITHUB_REPOSITORY"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/install.sh
+          dist/dji-phone-gateway.tar.gz
+          dist/dji-phone-gateway.tar.gz.sha256
+          --generate-notes

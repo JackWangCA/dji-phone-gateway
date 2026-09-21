@@ -21,6 +21,17 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libsrtp2-dev libspandsp-dev libcurl4-openssl-dev libcap-dev python3-dev
 
 asterisk_version=20.21.0
+asterisk_sha256=13fd6e8f1fbb19a3174af82a388dd72c87eb2c92d32fca83c4d51bfab03f686a
+chan_quectel_commit=5552c365bfb319eed7cbbf6300a67028ab70db9e
+
+download_asterisk() {
+    destination=$1
+    curl -fL --retry 3 \
+        "https://downloads.asterisk.org/pub/telephony/asterisk/releases/asterisk-${asterisk_version}.tar.gz" \
+        -o "$destination"
+    printf '%s  %s\n' "$asterisk_sha256" "$destination" | sha256sum -c -
+}
+
 if command -v asterisk >/dev/null 2>&1; then
     echo "Using already installed Asterisk: $(asterisk -V)"
 elif apt-cache policy asterisk | grep -q 'Candidate: [0-9]'; then
@@ -29,9 +40,7 @@ else
     echo "Asterisk is unavailable from this OS repository; building Asterisk 20 LTS..."
     asterisk_archive="asterisk-${asterisk_version}.tar.gz"
     asterisk_build=$(mktemp -d /var/tmp/dji-asterisk.XXXXXX)
-    curl -fL --retry 3 \
-        "https://downloads.asterisk.org/pub/telephony/asterisk/releases/$asterisk_archive" \
-        -o "$asterisk_build/$asterisk_archive"
+    download_asterisk "$asterisk_build/$asterisk_archive"
     tar -xzf "$asterisk_build/$asterisk_archive" -C "$asterisk_build"
     cd "$asterisk_build/asterisk-$asterisk_version"
     ./configure --with-pjproject-bundled --with-jansson-bundled
@@ -54,9 +63,7 @@ if [ ! -f /usr/include/asterisk.h ] || [ ! -f /usr/include/asterisk/buildopts.h 
     echo "Installing Asterisk development headers..."
     header_build=$(mktemp -d /var/tmp/dji-asterisk-headers.XXXXXX)
     header_archive="asterisk-${asterisk_version}.tar.gz"
-    curl -fL --retry 3 \
-        "https://downloads.asterisk.org/pub/telephony/asterisk/releases/$header_archive" \
-        -o "$header_build/$header_archive"
+    download_asterisk "$header_build/$header_archive"
     tar -xzf "$header_build/$header_archive" -C "$header_build"
     cd "$header_build/asterisk-$asterisk_version"
     ./configure --with-pjproject-bundled --with-jansson-bundled
@@ -70,6 +77,7 @@ echo "Building chan_quectel..."
 build_dir=$(mktemp -d /var/tmp/dji-chan-quectel.XXXXXX)
 trap 'rm -rf "$build_dir"' EXIT INT TERM
 git clone https://github.com/RoEdAl/asterisk-chan-quectel.git "$build_dir/src"
+git -C "$build_dir/src" checkout --detach "$chan_quectel_commit"
 patch -d "$build_dir/src" -p1 < "$src_dir/patches/chan-quectel-baiwang.patch"
 cmake -S "$build_dir/src" -B "$build_dir/build" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$build_dir/build" -j2
