@@ -34,6 +34,24 @@ class ConversationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "do not match"):
             dashboard.save_dashboard_credentials("jackwang", "123456", "654321")
 
+    def test_persistent_session_survives_new_requests_and_password_change_revokes_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = pathlib.Path(directory) / "settings.json"
+            with mock.patch.object(dashboard, "SETTINGS_PATH", settings):
+                dashboard.save_dashboard_credentials("jackwang", "123456", "123456")
+                token, lifetime = dashboard.create_session_token("jackwang", True)
+                self.assertEqual(lifetime, dashboard.SESSION_TTL)
+                self.assertTrue(dashboard.verify_session_token(token))
+                dashboard.save_dashboard_credentials("jackwang", "654321", "654321")
+                self.assertFalse(dashboard.verify_session_token(token))
+
+    def test_login_page_defaults_to_thirty_day_session(self):
+        document = dashboard.login_page(next_path="/#conversations")
+        self.assertIn("Keep me signed in for 30 days", document)
+        self.assertIn('name="remember" type="checkbox" value="yes" checked', document)
+        self.assertIn('name="next" value="/#conversations"', document)
+        self.assertNotIn("@@", document)
+
     def test_legacy_inbox_migrates_and_outgoing_message_is_returned(self):
         with tempfile.TemporaryDirectory() as directory:
             database = pathlib.Path(directory) / "messages.sqlite3"
