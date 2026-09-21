@@ -167,8 +167,27 @@ def resolve_reply_target(cfg: Config, chat_id: int, reply_message_id: int | None
 
 
 def queue_sms(cfg: Config, number: str, message: str) -> tuple[bool, str]:
+    number = number.strip().replace(" ", "").replace("-", "")
     output = ami_command(cfg, f"quectel sms send {cfg.modem} {number} {message}")
-    return "SMS queued for send" in output, output
+    queued = "SMS queued for send" in output
+    if queued:
+        try:
+            with sqlite3.connect(cfg.sms_database, timeout=3) as db:
+                db.execute(
+                    "CREATE TABLE IF NOT EXISTS messages ("
+                    "id INTEGER PRIMARY KEY, received_at TEXT DEFAULT CURRENT_TIMESTAMP, "
+                    "sender TEXT NOT NULL, body TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'incoming')"
+                )
+                columns = {str(row[1]) for row in db.execute("PRAGMA table_info(messages)")}
+                if "direction" not in columns:
+                    db.execute("ALTER TABLE messages ADD COLUMN direction TEXT NOT NULL DEFAULT 'incoming'")
+                db.execute(
+                    "INSERT INTO messages(sender, body, direction) VALUES (?, ?, 'outgoing')",
+                    (number, message),
+                )
+        except sqlite3.Error as exc:
+            LOG.warning("SMS queued but could not be added to conversation history: %s", exc)
+    return queued, output
 
 
 def handle(cfg: Config, tg: Telegram, chat_id: int, text: str, reply_message_id: int | None = None) -> None:

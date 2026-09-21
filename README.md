@@ -9,7 +9,7 @@ Turn a first-generation DJI 4G dongle (Quectel EG25-G) into a private cellular-t
 - Incoming SMS messages are forwarded to one authorized Telegram chat.
 - `/sms +15551234567 hello` sends an SMS.
 - `/data_on`, `/data_off`, and `/status` control/report the modem data path. Data is off by default.
-- A password-protected dashboard on port 8080 configures Telegram, shows received SMS, sends SMS, and switches cellular data.
+- A password-protected dashboard on port 8080 configures Telegram, presents SMS as two-way conversations, starts new messages, and switches cellular data.
 
 Telegram bots cannot originate or receive Telegram voice calls and cannot invoke iOS CallKit. Telegram is therefore used only for SMS and controls; SIP supplies the native-call UI.
 

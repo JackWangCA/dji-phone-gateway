@@ -71,6 +71,17 @@ class ParsingTests(unittest.TestCase):
                 ["SMS queued to +15551234567.", "SMS queued to +15557654321."],
             )
 
+    def test_queued_telegram_sms_is_added_to_conversation_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = str(pathlib.Path(directory) / "messages.sqlite3")
+            cfg = bridge.Config("token", 42, "user", "password", sms_database=database)
+            with mock.patch.object(bridge, "ami_command", return_value="SMS queued for send"):
+                queued, _ = bridge.queue_sms(cfg, "+1 555-123-4567", "Reply")
+            with sqlite3.connect(database) as db:
+                row = db.execute("SELECT sender, body, direction FROM messages").fetchone()
+            self.assertTrue(queued)
+            self.assertEqual(row, ("+15551234567", "Reply", "outgoing"))
+
 
 if __name__ == "__main__":
     unittest.main()

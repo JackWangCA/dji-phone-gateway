@@ -40,6 +40,17 @@ def save_reply_target(database, message_id, chat_id, sender):
         )
 
 
+def ensure_message_schema(db):
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS messages ("
+        "id INTEGER PRIMARY KEY, received_at TEXT DEFAULT CURRENT_TIMESTAMP, "
+        "sender TEXT NOT NULL, body TEXT NOT NULL, direction TEXT NOT NULL DEFAULT 'incoming')"
+    )
+    columns = {str(row[1]) for row in db.execute("PRAGMA table_info(messages)")}
+    if "direction" not in columns:
+        db.execute("ALTER TABLE messages ADD COLUMN direction TEXT NOT NULL DEFAULT 'incoming'")
+
+
 def agi_variable(name):
     print(f"GET VARIABLE {name}", flush=True)
     response = sys.stdin.readline().strip()
@@ -84,8 +95,11 @@ def main():
     database = os.environ.get("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3")
     try:
         with sqlite3.connect(database) as db:
-            db.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, received_at TEXT DEFAULT CURRENT_TIMESTAMP, sender TEXT NOT NULL, body TEXT NOT NULL)")
-            db.execute("INSERT INTO messages(sender, body) VALUES (?, ?)", (sender, message))
+            ensure_message_schema(db)
+            db.execute(
+                "INSERT INTO messages(sender, body, direction) VALUES (?, ?, 'incoming')",
+                (sender, message),
+            )
         agi_verbose(f"DJI gateway: stored inbound SMS from {sender}")
     except sqlite3.Error as exc:
         agi_verbose(f"DJI gateway: failed to store inbound SMS: {exc}", 3)
