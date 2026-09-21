@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import html
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -27,6 +30,8 @@ PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 SETTINGS_PATH = Path(os.getenv("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json"))
 SMS_DATABASE = Path(os.getenv("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3"))
 CSRF_TOKEN = secrets.token_urlsafe(32)
+SETTINGS_LOCK = threading.Lock()
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
 
 
 def run(command: list[str], timeout: int = 15) -> tuple[int, str]:
@@ -42,12 +47,55 @@ def load_settings() -> dict:
         return {}
 
 
+def update_settings(values: dict[str, object]) -> None:
+    with SETTINGS_LOCK:
+        settings = load_settings()
+        settings.update(values)
+        SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = SETTINGS_PATH.with_suffix(".tmp")
+        temporary.write_text(json.dumps(settings) + "\n", encoding="utf-8")
+        temporary.chmod(0o640)
+        temporary.replace(SETTINGS_PATH)
+
+
 def save_settings(token: str, chat_id: int) -> None:
-    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = SETTINGS_PATH.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"telegram_bot_token": token, "telegram_chat_id": chat_id}) + "\n", encoding="utf-8")
-    temporary.chmod(0o640)
-    temporary.replace(SETTINGS_PATH)
+    update_settings({"telegram_bot_token": token, "telegram_chat_id": chat_id})
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
+    return "scrypt$16384$8$1$" + base64.urlsafe_b64encode(salt).decode() + "$" + base64.urlsafe_b64encode(digest).decode()
+
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        algorithm, n, r, p, salt, expected = encoded.split("$", 5)
+        if algorithm != "scrypt" or (int(n), int(r), int(p)) != (16384, 8, 1):
+            return False
+        actual = hashlib.scrypt(
+            password.encode(), salt=base64.urlsafe_b64decode(salt),
+            n=int(n), r=int(r), p=int(p), dklen=32,
+        )
+        return secrets.compare_digest(actual, base64.urlsafe_b64decode(expected))
+    except (ValueError, TypeError, binascii.Error):
+        return False
+
+
+def dashboard_username(settings: dict | None = None) -> str:
+    settings = load_settings() if settings is None else settings
+    return str(settings.get("dashboard_username") or os.getenv("DASHBOARD_USERNAME", "admin"))
+
+
+def save_dashboard_credentials(username: str, password: str, confirmation: str) -> None:
+    username = username.strip()
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError("Username must be 3–32 letters, numbers, dots, underscores, or hyphens.")
+    if password != confirmation:
+        raise ValueError("The new passwords do not match.")
+    if not 6 <= len(password) <= 128:
+        raise ValueError("Password must be 6–128 characters.")
+    update_settings({"dashboard_username": username, "dashboard_password_hash": hash_password(password)})
 
 
 def bridge_config() -> Config:
@@ -150,7 +198,7 @@ HTML = r"""<!doctype html>
 *{box-sizing:border-box}[hidden]{display:none!important}html{background:var(--paper)}body{margin:0;color:var(--ink);background:var(--paper);font:16px/1.4 "Helvetica Neue",Helvetica,Arial,sans-serif}button,input,textarea{font:inherit}button{border-radius:0}main{max-width:1280px;margin:0 auto;padding:0 32px 72px}.masthead{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:260px;border-left:18px solid var(--accent);border-bottom:1px solid var(--ink);padding:32px 36px 22px}.brand{align-self:end;position:relative;z-index:1}h1{max-width:700px;margin:0;font-size:clamp(2.8rem,7vw,6.8rem);font-weight:700;line-height:.86;letter-spacing:-.075em}.host{margin:18px 0 0;font-size:.875rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}.folio{align-self:start;margin-top:-19px;font-size:clamp(8rem,20vw,17rem);font-weight:700;line-height:.8;letter-spacing:-.11em;color:var(--field);user-select:none}
 .primary-nav{display:flex;border-bottom:1px solid var(--ink)}.nav-tab{min-width:180px;border:0;border-right:1px solid var(--ink);background:var(--paper);color:var(--ink);padding:15px 20px;text-align:left;font-weight:700;cursor:pointer}.nav-tab[aria-selected="true"]{background:var(--ink);color:#fff}.nav-tab:hover,.nav-tab:focus-visible{background:var(--accent);color:#fff;outline:0}.notice{margin:0;border-bottom:1px solid var(--ink);padding:18px 36px;background:var(--accent);color:#fff;font-weight:700}.notice ul{margin:10px 0 0;padding-left:20px}code{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums}.view[hidden]{display:none}
 .section-head{display:grid;grid-template-columns:70px 1fr auto;align-items:baseline;border-bottom:1px solid var(--ink);padding:22px 0 14px}.section-no{color:var(--accent);font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums}h2{margin:0;font-size:1.3rem;line-height:1.1;letter-spacing:-.025em}.status-block{border-bottom:1px solid var(--ink)}.status-grid{display:grid;grid-template-columns:repeat(5,1fr)}.status-item{min-width:0;min-height:118px;padding:18px 16px;border-right:1px solid var(--line)}.status-item:last-child{border-right:0}.status-label{display:block;min-height:38px;color:var(--muted);font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.status-value{display:block;margin-top:18px;font-size:1.05rem;overflow-wrap:anywhere}.bad{color:var(--accent)}.data-readout{display:grid;grid-template-columns:70px 1fr;padding:14px 0;border-top:1px solid var(--line);font-size:.85rem}.data-readout span{color:var(--muted);font-weight:700}.data-readout code{overflow-wrap:anywhere}
-.control-grid{display:grid;grid-template-columns:1fr 2fr;border-bottom:1px solid var(--ink)}.panel{min-width:0;padding:0 22px 28px;border-right:1px solid var(--ink)}.panel:first-child{padding-left:0}.panel:last-child{padding-right:0;border-right:0}.panel .section-head{grid-template-columns:54px 1fr}.hint{min-height:44px;margin:18px 0;color:var(--muted);font-size:.88rem}label{display:block;margin:17px 0 7px;font-size:.75rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}input,textarea{width:100%;border:1px solid var(--ink);border-radius:0;background:var(--paper);color:var(--ink);padding:10px 12px;outline:none}input{height:46px}textarea{min-height:90px;resize:vertical}input:focus,textarea:focus{border-color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}input::placeholder,textarea::placeholder{color:#8a8a8a}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.button{min-height:42px;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}.button:hover,.button:focus-visible{background:var(--accent);border-color:var(--accent)}.button.secondary{background:var(--paper);color:var(--ink)}.button.secondary:hover,.button.secondary:focus-visible{background:var(--ink);color:#fff}.button.danger{background:var(--accent);border-color:var(--accent)}form{margin:0}
+.control-grid{display:grid;grid-template-columns:.8fr 1.3fr 1fr;border-bottom:1px solid var(--ink)}.panel{min-width:0;padding:0 22px 28px;border-right:1px solid var(--ink)}.panel:first-child{padding-left:0}.panel:last-child{padding-right:0;border-right:0}.panel .section-head{grid-template-columns:54px 1fr}.hint{min-height:44px;margin:18px 0;color:var(--muted);font-size:.88rem}.form-status{margin:12px 0 0;color:var(--accent);font-size:.85rem;font-weight:700}label{display:block;margin:17px 0 7px;font-size:.75rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}input,textarea{width:100%;border:1px solid var(--ink);border-radius:0;background:var(--paper);color:var(--ink);padding:10px 12px;outline:none}input{height:46px}textarea{min-height:90px;resize:vertical}input:focus,textarea:focus{border-color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}input::placeholder,textarea::placeholder{color:#8a8a8a}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.button{min-height:42px;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}.button:hover,.button:focus-visible{background:var(--accent);border-color:var(--accent)}.button.secondary{background:var(--paper);color:var(--ink)}.button.secondary:hover,.button.secondary:focus-visible{background:var(--ink);color:#fff}.button.danger{background:var(--accent);border-color:var(--accent)}form{margin:0}
 .conversation-heading{padding-top:8px}.new-button{position:relative;width:44px;height:44px;border:1px solid var(--ink);background:var(--accent);cursor:pointer}.new-button::before,.new-button::after{content:"";position:absolute;left:12px;right:12px;top:20px;height:2px;background:#fff}.new-button::after{transform:rotate(90deg)}.new-button:hover,.new-button:focus-visible{background:var(--ink);outline:0}.conversation-shell{display:grid;grid-template-columns:minmax(260px,34%) minmax(0,1fr);height:min(680px,calc(100dvh - 205px));min-height:520px;border-bottom:1px solid var(--ink)}.conversation-index{min-width:0;min-height:0;border-right:1px solid var(--ink);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.index-label,.thread-head{height:76px;border-bottom:1px solid var(--ink);padding:16px 18px}.index-label{display:flex;align-items:flex-end;color:var(--muted);font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.conversation-list{margin:0;padding:0;list-style:none}.conversation-row{position:relative;width:100%;border:0;border-bottom:1px solid var(--line);background:var(--paper);color:var(--ink);padding:17px 18px;text-align:left;cursor:pointer}.conversation-row:hover,.conversation-row:focus-visible{background:var(--field);outline:0}.conversation-row.active{background:var(--ink);color:#fff}.conversation-row.fresh::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--accent);animation:red-mark .75s ease both}.conversation-peer{display:flex;justify-content:space-between;gap:12px;font-weight:700}.conversation-time{flex:none;color:var(--muted);font-size:.72rem;font-weight:500}.active .conversation-time{color:#c9c9c9}.conversation-preview{margin-top:7px;color:var(--muted);font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.active .conversation-preview{color:#fff}.thread{display:grid;grid-template-rows:76px minmax(0,1fr) auto;min-width:0;min-height:0}.thread-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}.thread-head strong{font-size:1.1rem}.thread-count{color:var(--muted);font-size:.75rem}.message-stream{display:flex;min-height:0;flex-direction:column;gap:12px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;padding:24px 22px}.empty-thread{margin:auto;color:var(--muted);max-width:280px;text-align:center}.message{max-width:min(78%,620px);border:1px solid var(--ink);padding:11px 13px 8px;overflow-wrap:anywhere}.message.incoming{align-self:flex-start;background:var(--paper)}.message.outgoing{align-self:flex-end;background:var(--ink);color:#fff}.message.pending{opacity:.55}.message-time{display:block;margin-top:7px;color:var(--muted);font-size:.68rem;font-variant-numeric:tabular-nums}.outgoing .message-time{color:#c9c9c9}.message.arriving{animation:message-arrive .42s cubic-bezier(.2,.8,.2,1) both}.composer{display:grid;grid-template-columns:1fr auto;border-top:1px solid var(--ink)}.composer textarea{min-height:76px;border:0;padding:17px 18px}.composer textarea:focus{box-shadow:inset 0 0 0 2px var(--accent)}.composer .button{height:100%;min-width:104px;border-width:0 0 0 1px}.composer[hidden]{display:none}.send-error{padding:9px 18px;background:var(--accent);color:#fff;font-weight:700}
 dialog{width:min(540px,calc(100% - 28px));border:1px solid var(--ink);border-radius:0;padding:0;background:var(--paper);color:var(--ink)}dialog::backdrop{background:rgba(0,0,0,.48)}dialog[open]{animation:dialog-in .25s ease both}.dialog-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--ink);padding:18px 20px}.dialog-head h2{font-size:1.5rem}.dialog-close{position:relative;width:38px;height:38px;border:0;background:transparent;cursor:pointer}.dialog-close::before,.dialog-close::after{content:"";position:absolute;left:8px;right:8px;top:18px;height:2px;background:var(--ink);transform:rotate(45deg)}.dialog-close::after{transform:rotate(-45deg)}.dialog-close:hover::before,.dialog-close:hover::after,.dialog-close:focus-visible::before,.dialog-close:focus-visible::after{background:var(--accent)}.dialog-body{padding:2px 20px 22px}
 @keyframes message-arrive{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}@keyframes red-mark{0%{transform:scaleY(0)}100%{transform:scaleY(1)}}@keyframes dialog-in{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
@@ -162,8 +210,9 @@ dialog{width:min(540px,calc(100% - 28px));border:1px solid var(--ink);border-rad
 @@BANNER@@@@CHATS@@
 <div id="dashboard-view" class="view"><section class="status-block"><div class="section-head"><span class="section-no">00</span><h2>Gateway status</h2></div><div class="status-grid">@@STATUS@@</div><div class="data-readout"><span>Data</span><code>@@DATA_STATUS@@</code></div></section>
 <div class="control-grid"><section class="panel"><div class="section-head"><span class="section-no">01</span><h2>Cellular data</h2></div><p class="hint">Mobile data stays off unless you enable it here.</p><form method="post" action="/data"><input type="hidden" name="csrf" value="@@CSRF@@"><div class="actions"><button class="button secondary" name="state" value="off">Data off</button><button class="button danger" name="state" value="on">Data on</button></div></form></section>
-<section class="panel"><div class="section-head"><span class="section-no">02</span><h2>Telegram setup</h2></div><p class="hint">Paste the token from @BotFather. Your saved token is never displayed.</p><form method="post" action="/telegram"><input type="hidden" name="csrf" value="@@CSRF@@"><label>Bot token</label><input type="password" name="token" placeholder="@@TOKEN_PLACEHOLDER@@" autocomplete="off"><label>Authorized chat ID</label><input name="chat_id" value="@@CHAT_ID@@" inputmode="numeric"><div class="actions"><button class="button" name="action" value="save">Save settings</button><button class="button secondary" name="action" value="test">Send test</button><button class="button secondary" name="action" value="discover">Find chat IDs</button></div></form></section></div></div>
-<div id="conversations-view" class="view" hidden><section class="conversation-heading"><div class="section-head"><span class="section-no">03</span><h2>Conversations</h2><button id="new-message" class="new-button" aria-label="New message" title="New message"></button></div><div class="conversation-shell"><aside class="conversation-index"><div class="index-label">Recent conversations</div><ol id="conversation-list" class="conversation-list"></ol></aside><article class="thread"><header class="thread-head"><strong id="thread-peer">Select a conversation</strong><span id="thread-count" class="thread-count"></span></header><div id="message-stream" class="message-stream"><p class="empty-thread">Incoming and sent messages will appear here.</p></div><div id="send-error" class="send-error" hidden></div><form id="reply-form" class="composer" hidden><textarea name="message" maxlength="670" aria-label="Message" placeholder="Message" required></textarea><button class="button">Send</button></form></article></div></section></div>
+<section class="panel"><div class="section-head"><span class="section-no">02</span><h2>Telegram setup</h2></div><p class="hint">Paste the token from @BotFather. Your saved token is never displayed.</p><form method="post" action="/telegram"><input type="hidden" name="csrf" value="@@CSRF@@"><label>Bot token</label><input type="password" name="token" placeholder="@@TOKEN_PLACEHOLDER@@" autocomplete="off"><label>Authorized chat ID</label><input name="chat_id" value="@@CHAT_ID@@" inputmode="numeric"><div class="actions"><button class="button" name="action" value="save">Save settings</button><button class="button secondary" name="action" value="test">Send test</button><button class="button secondary" name="action" value="discover">Find chat IDs</button></div></form></section>
+<section class="panel"><div class="section-head"><span class="section-no">03</span><h2>Dashboard access</h2></div><p class="hint">Change the username and password used by this dashboard.</p><form id="access-form"><label>Username</label><input name="username" value="@@DASHBOARD_USERNAME@@" autocomplete="username" required><label>New password</label><input type="password" name="password" minlength="6" maxlength="128" autocomplete="new-password" required><label>Confirm password</label><input type="password" name="confirmation" minlength="6" maxlength="128" autocomplete="new-password" required><p id="access-status" class="form-status" hidden></p><div class="actions"><button class="button">Change login</button></div></form></section></div></div>
+<div id="conversations-view" class="view" hidden><section class="conversation-heading"><div class="section-head"><span class="section-no">04</span><h2>Conversations</h2><button id="new-message" class="new-button" aria-label="New message" title="New message"></button></div><div class="conversation-shell"><aside class="conversation-index"><div class="index-label">Recent conversations</div><ol id="conversation-list" class="conversation-list"></ol></aside><article class="thread"><header class="thread-head"><strong id="thread-peer">Select a conversation</strong><span id="thread-count" class="thread-count"></span></header><div id="message-stream" class="message-stream"><p class="empty-thread">Incoming and sent messages will appear here.</p></div><div id="send-error" class="send-error" hidden></div><form id="reply-form" class="composer" hidden><textarea name="message" maxlength="670" aria-label="Message" placeholder="Message" required></textarea><button class="button">Send</button></form></article></div></section></div>
 <dialog id="new-dialog"><div class="dialog-head"><h2>New message</h2><button class="dialog-close" type="button" aria-label="Close"></button></div><form id="new-form" class="dialog-body"><label>Phone number</label><input name="number" inputmode="tel" autocomplete="tel" placeholder="+15551234567" required><label>Message</label><textarea name="message" maxlength="670" required></textarea><div class="actions"><button class="button">Send</button><button class="button secondary cancel-new" type="button">Cancel</button></div></form></dialog>
 <script>
 const csrf=@@CSRF_JSON@@;let allMessages=@@MESSAGES_JSON@@;let selectedPeer=null;let knownIds=new Set(allMessages.map(message=>message.id));let freshPeers=new Set();const list=document.getElementById('conversation-list'),stream=document.getElementById('message-stream'),replyForm=document.getElementById('reply-form'),sendError=document.getElementById('send-error');
@@ -178,6 +227,7 @@ async function fetchMessages(){try{const response=await fetch('/messages',{cache
 async function transmit(number,body){const data=new URLSearchParams({csrf,number,message:body});const response=await fetch('/api/sms',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data});const result=await response.json();if(!response.ok)throw new Error(result.error||'Message could not be sent.');if(result.message.history_warning){sendError.textContent=result.message.history_warning;sendError.hidden=false}return result.message}
 replyForm.addEventListener('submit',async event=>{event.preventDefault();const textarea=replyForm.elements.message,body=textarea.value.trim();if(!body||!selectedPeer)return;sendError.hidden=true;const temporary={id:Date.now(),timestamp:new Date().toISOString(),peer:selectedPeer,body,direction:'outgoing',pending:true};allMessages.push(temporary);textarea.value='';selectPeer(selectedPeer,new Set([temporary.id]));try{const saved=await transmit(selectedPeer,body);allMessages=allMessages.filter(message=>message!==temporary);allMessages.push(saved);knownIds.add(saved.id);selectPeer(selectedPeer,new Set([saved.id]))}catch(error){allMessages=allMessages.filter(message=>message!==temporary);selectPeer(selectedPeer);sendError.textContent=error.message;sendError.hidden=false}});
 const dialog=document.getElementById('new-dialog'),newForm=document.getElementById('new-form');document.getElementById('new-message').addEventListener('click',()=>dialog.showModal());document.querySelector('.dialog-close').addEventListener('click',()=>dialog.close());document.querySelector('.cancel-new').addEventListener('click',()=>dialog.close());newForm.addEventListener('submit',async event=>{event.preventDefault();const number=newForm.elements.number.value.trim(),body=newForm.elements.message.value.trim(),submit=newForm.querySelector('button');submit.disabled=true;try{const saved=await transmit(number,body);allMessages.push(saved);knownIds.add(saved.id);newForm.reset();dialog.close();selectPeer(saved.peer,new Set([saved.id]));switchView('conversations')}catch(error){alert(error.message)}finally{submit.disabled=false}});
+const accessForm=document.getElementById('access-form'),accessStatus=document.getElementById('access-status');accessForm.addEventListener('submit',async event=>{event.preventDefault();accessStatus.hidden=true;const data=new URLSearchParams({csrf,username:accessForm.elements.username.value,password:accessForm.elements.password.value,confirmation:accessForm.elements.confirmation.value});const response=await fetch('/api/access',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:data});const result=await response.json();if(!response.ok){accessStatus.textContent=result.error||'Login could not be changed.';accessStatus.hidden=false;return}accessStatus.textContent='Login changed. Sign in again with the new credentials.';accessStatus.hidden=false;accessForm.elements.password.value='';accessForm.elements.confirmation.value='';setTimeout(()=>location.reload(),1200)});
 renderList();if(location.hash==='#conversations')switchView('conversations');setInterval(fetchMessages,4000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')fetchMessages()});
 </script></main></body></html>"""
 
@@ -207,7 +257,8 @@ def page(message: str = "", discovered: list[dict] | None = None) -> str:
         "@@BANNER@@": f'<div class="notice">{html.escape(message)}</div>' if message else "", "@@CHATS@@": chats,
         "@@STATUS@@": status, "@@DATA_STATUS@@": html.escape(data_status), "@@CSRF@@": html.escape(CSRF_TOKEN, quote=True),
         "@@CSRF_JSON@@": json.dumps(CSRF_TOKEN), "@@TOKEN_PLACEHOLDER@@": "Saved — leave blank to keep it" if token_set else "123456:ABC…",
-        "@@CHAT_ID@@": html.escape(str(chat_id), quote=True), "@@MESSAGES_JSON@@": json.dumps(messages()).replace("</", "<\\/"),
+        "@@CHAT_ID@@": html.escape(str(chat_id), quote=True), "@@DASHBOARD_USERNAME@@": html.escape(dashboard_username(settings), quote=True),
+        "@@MESSAGES_JSON@@": json.dumps(messages()).replace("</", "<\\/"),
     }
     document = HTML
     for marker, value in replacements.items():
@@ -219,15 +270,17 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "DJIGateway/1.0"
 
     def authorized(self) -> bool:
-        if not PASSWORD:
-            return False
         header = self.headers.get("Authorization", "")
         try:
             scheme, encoded = header.split(" ", 1)
             username, password = base64.b64decode(encoded).decode().split(":", 1)
         except (ValueError, UnicodeDecodeError, binascii.Error):
             return False
-        return scheme.lower() == "basic" and secrets.compare_digest(username, "admin") and secrets.compare_digest(password, PASSWORD)
+        settings = load_settings()
+        expected_username = dashboard_username(settings)
+        encoded_password = str(settings.get("dashboard_password_hash") or "")
+        password_matches = verify_password(password, encoded_password) if encoded_password else bool(PASSWORD) and secrets.compare_digest(password, PASSWORD)
+        return scheme.lower() == "basic" and secrets.compare_digest(username, expected_username) and password_matches
 
     def authenticate(self) -> bool:
         if self.authorized():
@@ -252,7 +305,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if not self.authenticate(): return
-        form = self.form(); is_api = self.path == "/api/sms"
+        form = self.form(); is_api = self.path.startswith("/api/")
         if not secrets.compare_digest(form.get("csrf", ""), CSRF_TOKEN):
             if is_api: self.respond_json({"error": "Request expired; reload the dashboard."}, 403)
             else: self.respond(page("Request expired; reload the dashboard."), 403)
@@ -285,6 +338,9 @@ class Handler(BaseHTTPRequestHandler):
                 saved = send_sms(form.get("number", ""), form.get("message", ""))
                 if is_api: self.respond_json({"message": saved})
                 else: self.respond(page("SMS queued."))
+            elif self.path == "/api/access":
+                save_dashboard_credentials(form.get("username", ""), form.get("password", ""), form.get("confirmation", ""))
+                self.respond_json({"ok": True})
             else: self.send_error(404)
         except (ValueError, RuntimeError, OSError, KeyError, sqlite3.Error, urllib.error.URLError) as exc:
             if is_api: self.respond_json({"error": str(exc)}, 400)
@@ -295,5 +351,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    if not PASSWORD or PASSWORD == "CHANGE_ME": raise SystemExit("DASHBOARD_PASSWORD is not configured")
+    saved_password = str(load_settings().get("dashboard_password_hash") or "")
+    if (not PASSWORD or PASSWORD == "CHANGE_ME") and not saved_password: raise SystemExit("DASHBOARD_PASSWORD is not configured")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

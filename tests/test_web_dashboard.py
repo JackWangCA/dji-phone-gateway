@@ -15,6 +15,25 @@ dashboard = importlib.import_module("web_dashboard")
 
 
 class ConversationTests(unittest.TestCase):
+    def test_dashboard_credentials_are_hashed_and_preserve_other_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = pathlib.Path(directory) / "settings.json"
+            settings.write_text('{"telegram_bot_token":"token","telegram_chat_id":42}\n')
+            with mock.patch.object(dashboard, "SETTINGS_PATH", settings):
+                dashboard.save_dashboard_credentials("jackwang", "123456", "123456")
+                saved = dashboard.load_settings()
+            self.assertEqual(saved["dashboard_username"], "jackwang")
+            self.assertEqual(saved["telegram_chat_id"], 42)
+            self.assertNotIn("123456", saved["dashboard_password_hash"])
+            self.assertTrue(dashboard.verify_password("123456", saved["dashboard_password_hash"]))
+            self.assertFalse(dashboard.verify_password("wrong", saved["dashboard_password_hash"]))
+
+    def test_dashboard_credentials_validate_username_and_confirmation(self):
+        with self.assertRaisesRegex(ValueError, "Username"):
+            dashboard.save_dashboard_credentials("x", "123456", "123456")
+        with self.assertRaisesRegex(ValueError, "do not match"):
+            dashboard.save_dashboard_credentials("jackwang", "123456", "654321")
+
     def test_legacy_inbox_migrates_and_outgoing_message_is_returned(self):
         with tempfile.TemporaryDirectory() as directory:
             database = pathlib.Path(directory) / "messages.sqlite3"
@@ -62,7 +81,9 @@ class ConversationTests(unittest.TestCase):
             document = dashboard.page()
         self.assertIn('data-view="conversations"', document)
         self.assertIn('id="new-message"', document)
+        self.assertIn('id="access-form"', document)
         self.assertIn("/api/sms", document)
+        self.assertIn("/api/access", document)
         self.assertIn("preserveScroll", document)
         self.assertIn("touch-action:pan-y", document)
         self.assertNotIn("@@", document)
