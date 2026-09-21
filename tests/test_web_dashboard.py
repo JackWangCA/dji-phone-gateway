@@ -63,6 +63,8 @@ class ConversationTests(unittest.TestCase):
         self.assertIn('data-view="conversations"', document)
         self.assertIn('id="new-message"', document)
         self.assertIn("/api/sms", document)
+        self.assertIn("preserveScroll", document)
+        self.assertIn("touch-action:pan-y", document)
         self.assertNotIn("@@", document)
 
 
