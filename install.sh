@@ -16,7 +16,7 @@ echo "Installing OS packages..."
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential cmake git libasound2-dev libsqlite3-dev libjansson-dev \
-    pkg-config python3 curl usbutils nftables network-manager modemmanager libqmi-utils sudo wget patch \
+    pkg-config python3 curl usbutils nftables network-manager modemmanager mobile-broadband-provider-info libqmi-utils sudo wget patch \
     libssl-dev libncurses-dev libnewt-dev libxml2-dev uuid-dev libedit-dev \
     libsrtp2-dev libspandsp-dev libcurl4-openssl-dev libcap-dev python3-dev
 
@@ -153,8 +153,14 @@ chown root:asterisk "$config_root/gateway.env"
 
 cellular_apn=$(sed -n 's/^CELLULAR_APN=//p' "$config_root/gateway.env" | tail -n 1)
 cellular_connection=$(sed -n 's/^CELLULAR_CONNECTION=//p' "$config_root/gateway.env" | tail -n 1)
-if [ -n "$cellular_apn" ] && ! nmcli -t -f NAME connection show | grep -Fxq "${cellular_connection:-cellular}"; then
-    nmcli connection add type gsm ifname '*' con-name "${cellular_connection:-cellular}" apn "$cellular_apn" connection.autoconnect no
+cellular_connection=${cellular_connection:-cellular}
+if ! nmcli -t -f NAME connection show | grep -Fxq "$cellular_connection"; then
+    nmcli connection add type gsm ifname '*' con-name "$cellular_connection" connection.autoconnect no
+fi
+if [ -n "$cellular_apn" ]; then
+    nmcli connection modify "$cellular_connection" gsm.auto-config no gsm.apn "$cellular_apn"
+else
+    nmcli connection modify "$cellular_connection" gsm.apn '' gsm.auto-config yes
 fi
 
 # AGI inherits Asterisk's environment, not the bridge service EnvironmentFile.

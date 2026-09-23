@@ -4,6 +4,8 @@ set -eu
 operation=${1:-status}
 connection=${CELLULAR_CONNECTION:-cellular}
 interface=${WWAN_INTERFACE:-wwan0}
+apn=${CELLULAR_APN:-}
+sys_class_net=${SYS_CLASS_NET:-/sys/class/net}
 table=dji_gateway
 
 ensure_table() {
@@ -18,13 +20,21 @@ block_data() {
     nft add rule inet "$table" output oifname "$interface" counter reject
 }
 
+configure_connection() {
+    if ! nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq "$connection"; then
+        nmcli connection add type gsm ifname '*' con-name "$connection" connection.autoconnect no
+    fi
+    if [ -n "$apn" ]; then
+        nmcli connection modify "$connection" gsm.auto-config no gsm.apn "$apn"
+    else
+        nmcli connection modify "$connection" gsm.apn '' gsm.auto-config yes
+    fi
+}
+
 case "$operation" in
     on)
-        if ! nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq "$connection"; then
-            echo "Cellular profile '$connection' does not exist. Configure CELLULAR_APN and create the NetworkManager GSM profile first." >&2
-            exit 1
-        fi
-        if [ ! -e "/sys/class/net/$interface" ]; then
+        configure_connection
+        if [ ! -e "$sys_class_net/$interface" ]; then
             echo "Cellular interface '$interface' is unavailable. Confirm the modem is in Quectel/QMI USB mode." >&2
             exit 1
         fi
