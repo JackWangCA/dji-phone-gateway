@@ -37,7 +37,7 @@ class ParsingTests(unittest.TestCase):
         cfg = bridge.Config("token", 42, "user", "password")
         bridge.handle(cfg, Telegram(), 7, "/help")
 
-    def test_quoted_and_unquoted_replies_resolve_the_right_sender(self):
+    def test_only_quoted_replies_are_sent(self):
         class Telegram:
             def __init__(self):
                 self.messages = []
@@ -62,14 +62,10 @@ class ParsingTests(unittest.TestCase):
             tg = Telegram()
             with mock.patch.object(bridge, "queue_sms", return_value=(True, "SMS queued for send")) as queue:
                 bridge.handle(cfg, tg, 42, "Quoted reply", reply_message_id=101)
-                bridge.handle(cfg, tg, 42, "Latest reply")
+                bridge.handle(cfg, tg, 42, "Unquoted reply")
 
-            self.assertEqual(queue.call_args_list[0].args[1:], ("+15551234567", "Quoted reply"))
-            self.assertEqual(queue.call_args_list[1].args[1:], ("+15557654321", "Latest reply"))
-            self.assertEqual(
-                tg.messages,
-                ["SMS queued to +15551234567.", "SMS queued to +15557654321."],
-            )
+            queue.assert_called_once_with(cfg, "+15551234567", "Quoted reply")
+            self.assertEqual(tg.messages, ["SMS queued to +15551234567."])
 
     def test_queued_telegram_sms_is_added_to_conversation_history(self):
         with tempfile.TemporaryDirectory() as directory:

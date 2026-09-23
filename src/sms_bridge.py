@@ -145,21 +145,14 @@ def run_data(cfg: Config, operation: str) -> str:
     return output
 
 
-def resolve_reply_target(cfg: Config, chat_id: int, reply_message_id: int | None) -> str | None:
-    """Resolve an exact quoted SMS, or the latest SMS when no quote was used."""
+def resolve_reply_target(cfg: Config, chat_id: int, reply_message_id: int) -> str | None:
+    """Resolve the sender linked to an exact quoted Telegram SMS notification."""
     try:
         with sqlite3.connect(f"file:{cfg.sms_database}?mode=ro", uri=True, timeout=2) as db:
-            if reply_message_id is not None:
-                row = db.execute(
-                    "SELECT sender FROM telegram_reply_targets WHERE chat_id = ? AND message_id = ?",
-                    (chat_id, reply_message_id),
-                ).fetchone()
-            else:
-                row = db.execute(
-                    "SELECT sender FROM telegram_reply_targets WHERE chat_id = ? "
-                    "ORDER BY created_at DESC, message_id DESC LIMIT 1",
-                    (chat_id,),
-                ).fetchone()
+            row = db.execute(
+                "SELECT sender FROM telegram_reply_targets WHERE chat_id = ? AND message_id = ?",
+                (chat_id, reply_message_id),
+            ).fetchone()
     except sqlite3.Error as exc:
         LOG.warning("could not resolve Telegram SMS reply target: %s", exc)
         return None
@@ -197,7 +190,7 @@ def handle(cfg: Config, tg: Telegram, chat_id: int, text: str, reply_message_id:
     stripped = text.strip()
     command, args = parse_command(stripped) if stripped.startswith("/") else ("", [])
     if command in ("/start", "/help"):
-        tg.send(chat_id, "Reply to a forwarded text to answer it. A plain message answers the most recent sender.\n\nCommands:\n/sms <number> <message>\n/status\n/data_on\n/data_off")
+        tg.send(chat_id, "Reply to a forwarded text to answer it. Unquoted messages are ignored.\n\nCommands:\n/sms <number> <message>\n/status\n/data_on\n/data_off")
     elif command == "/sms":
         if len(args) < 2 or not safe_phone(args[0]):
             tg.send(chat_id, "Usage: /sms +15551234567 message")
@@ -218,12 +211,11 @@ def handle(cfg: Config, tg: Telegram, chat_id: int, text: str, reply_message_id:
     elif command:
         tg.send(chat_id, "Unknown command. Use /help.")
     elif stripped:
+        if reply_message_id is None:
+            return
         target = resolve_reply_target(cfg, chat_id, reply_message_id)
         if not target:
-            if reply_message_id is not None:
-                tg.send(chat_id, "That forwarded message is too old or is not linked to an SMS.")
-            else:
-                tg.send(chat_id, "No recent incoming SMS is available to reply to.")
+            tg.send(chat_id, "That forwarded message is too old or is not linked to an SMS.")
             return
         if not safe_phone(target):
             tg.send(chat_id, "The sender number cannot receive an SMS reply.")
