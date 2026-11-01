@@ -19,11 +19,14 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
+from functools import lru_cache
 from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from dashboard_ui import DASHBOARD_HTML as REDESIGNED_HTML, LOGIN_HTML as REDESIGNED_LOGIN_HTML
 from sms_bridge import Config, Telegram, ami_command, safe_phone, safe_sms
 
 HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
@@ -34,6 +37,8 @@ SMS_DATABASE = Path(os.getenv("SMS_DATABASE", "/var/lib/dji-phone-gateway/messag
 ASSET_DIR = Path(__file__).resolve().parent
 CSRF_TOKEN = secrets.token_urlsafe(32)
 SETTINGS_LOCK = threading.Lock()
+STATUS_LOCK = threading.Lock()
+STATUS_CACHE: dict[str, object] = {"updated": 0.0, "value": None}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
 SESSION_COOKIE = "dji_gateway_session"
 SESSION_TTL = 30 * 24 * 60 * 60
@@ -161,6 +166,141 @@ def service_state(name: str) -> str:
     return output or "unknown"
 
 
+def useful(value: object) -> str:
+    text = str(value or "").strip()
+    return "" if text in ("--", "/") else text
+
+
+@lru_cache(maxsize=128)
+def provider_name(operator_code: str) -> str:
+    if not operator_code:
+        return ""
+    database = Path("/usr/share/mobile-broadband-provider-info/serviceproviders.xml")
+    try:
+        root = ET.parse(database).getroot()
+        for provider in root.findall(".//provider"):
+            name = provider.findtext("name", "").strip()
+            for network in provider.findall(".//network-id"):
+                if f"{network.get('mcc', '')}{network.get('mnc', '')}" == operator_code:
+                    return name
+    except (OSError, ET.ParseError):
+        pass
+    return ""
+
+
+def _json_command(command: list[str], timeout: int = 8) -> dict:
+    code, output = run(command, timeout)
+    if code:
+        return {}
+    try:
+        value = json.loads(output)
+        return value if isinstance(value, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _gateway_status() -> dict[str, object]:
+    status: dict[str, object] = {
+        "modem_present": False,
+        "sim_present": False,
+        "sim_status": "Unavailable",
+        "registered": False,
+        "registration": "Unavailable",
+        "signal": 0,
+        "carrier": "Unavailable",
+        "operator_code": "",
+        "phone_number": "Not provided by SIM",
+        "technology": "Unavailable",
+        "modem_state": "Unavailable",
+        "apn": "Automatic",
+        "apn_mode": "Automatic",
+        "data": "Unavailable",
+        "services": {},
+        "updated_at": int(time.time()),
+    }
+    listing = _json_command(["mmcli", "-L", "-J"], 5)
+    paths = listing.get("modem-list", [])
+    if isinstance(paths, list) and paths:
+        modem_index = str(paths[0]).rsplit("/", 1)[-1]
+        payload = _json_command(["mmcli", "-m", modem_index, "-J"], 8).get("modem", {})
+        if isinstance(payload, dict) and payload:
+            status["modem_present"] = True
+            generic = payload.get("generic", {}) if isinstance(payload.get("generic"), dict) else {}
+            gpp = payload.get("3gpp", {}) if isinstance(payload.get("3gpp"), dict) else {}
+            state = useful(generic.get("state")) or "unknown"
+            failure = useful(generic.get("state-failed-reason"))
+            sim_path = useful(generic.get("sim"))
+            status["modem_state"] = failure.replace("-", " ").title() if state == "failed" and failure else state.replace("-", " ").title()
+            status["sim_present"] = bool(sim_path)
+            unlock = useful(generic.get("unlock-required"))
+            status["sim_status"] = "No SIM" if not sim_path else ("PIN required" if unlock not in ("", "none", "sim-pin2") else "Ready")
+            quality = generic.get("signal-quality", {})
+            if isinstance(quality, dict):
+                try:
+                    status["signal"] = max(0, min(100, int(quality.get("value", 0))))
+                except (TypeError, ValueError):
+                    pass
+            technologies = generic.get("access-technologies", [])
+            if isinstance(technologies, list) and technologies:
+                status["technology"] = ", ".join(str(item).upper() for item in technologies)
+            registration = useful(gpp.get("registration-state")) or state
+            labels = {"home": "Registered", "roaming": "Roaming", "searching": "Searching", "denied": "Registration denied", "idle": "Idle", "failed": "Failed"}
+            status["registration"] = labels.get(registration, registration.replace("-", " ").title())
+            status["registered"] = registration in ("home", "roaming", "registered")
+            own_numbers = generic.get("own-numbers", [])
+            if isinstance(own_numbers, list):
+                number = next((useful(item) for item in own_numbers if useful(item)), "")
+                if number:
+                    status["phone_number"] = number
+            sim_operator_name = ""
+            sim_operator_code = ""
+            if sim_path:
+                sim_index = sim_path.rsplit("/", 1)[-1]
+                sim = _json_command(["mmcli", "-i", sim_index, "-J"], 5).get("sim", {})
+                properties = sim.get("properties", {}) if isinstance(sim, dict) and isinstance(sim.get("properties"), dict) else {}
+                sim_operator_name = useful(properties.get("operator-name"))
+                sim_operator_code = useful(properties.get("operator-code"))
+            operator_code = useful(gpp.get("operator-code")) or sim_operator_code
+            carrier = useful(gpp.get("operator-name")) or sim_operator_name or provider_name(operator_code)
+            status["operator_code"] = operator_code
+            status["carrier"] = carrier or operator_code or "Not registered"
+            eps = gpp.get("eps", {}) if isinstance(gpp.get("eps"), dict) else {}
+            initial = eps.get("initial-bearer", {}) if isinstance(eps.get("initial-bearer"), dict) else {}
+            settings = initial.get("settings", {}) if isinstance(initial.get("settings"), dict) else {}
+            detected_apn = useful(settings.get("apn"))
+            if detected_apn:
+                status["apn"] = detected_apn
+    connection = os.getenv("CELLULAR_CONNECTION", "cellular")
+    code, profile = run(["nmcli", "-g", "gsm.auto-config,gsm.apn", "connection", "show", connection], 5)
+    if code == 0:
+        lines = profile.splitlines()
+        automatic = bool(lines and lines[0].strip().lower() in ("yes", "true", "on"))
+        manual_apn = useful(lines[1]) if len(lines) > 1 else ""
+        status["apn_mode"] = "Automatic" if automatic else "Manual"
+        if manual_apn:
+            status["apn"] = manual_apn
+    _, data_status = run(["sudo", "-n", os.getenv("DATA_COMMAND", "/opt/dji-phone-gateway/bin/dji-data"), "status"], 8)
+    status["data"] = data_status or "Unavailable"
+    status["services"] = {
+        "Asterisk": service_state("asterisk"),
+        "Telegram": service_state("dji-sms-bridge"),
+        "Dashboard": service_state("dji-dashboard"),
+        "ModemManager": service_state("ModemManager"),
+    }
+    return status
+
+
+def gateway_status() -> dict[str, object]:
+    now = time.monotonic()
+    with STATUS_LOCK:
+        cached = STATUS_CACHE.get("value")
+        if isinstance(cached, dict) and now - float(STATUS_CACHE.get("updated", 0.0)) < 3:
+            return cached
+        value = _gateway_status()
+        STATUS_CACHE.update({"updated": now, "value": value})
+        return value
+
+
 def ensure_message_schema(db: sqlite3.Connection) -> None:
     db.execute(
         "CREATE TABLE IF NOT EXISTS messages ("
@@ -244,7 +384,7 @@ LOGIN_HTML = r"""<!doctype html>
 
 def login_page(error: str = "", next_path: str = "/") -> str:
     safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
-    return (LOGIN_HTML
+    return (REDESIGNED_LOGIN_HTML
             .replace("@@ERROR@@", f'<p class="error">{html.escape(error)}</p>' if error else "")
             .replace("@@CSRF@@", html.escape(CSRF_TOKEN, quote=True))
             .replace("@@NEXT@@", html.escape(safe_next, quote=True)))
@@ -296,31 +436,23 @@ def page(message: str = "", discovered: list[dict] | None = None) -> str:
     settings = load_settings()
     token_set = bool(settings.get("telegram_bot_token"))
     chat_id = settings.get("telegram_chat_id", "")
-    _, data_status = run(["sudo", "-n", os.getenv("DATA_COMMAND", "/opt/dji-phone-gateway/bin/dji-data"), "status"])
     modem_present = Path("/dev/dji-modem-at").exists()
     audio_present = Path("/dev/dji-modem-audio").exists()
-    status = "".join(
-        f'<div class="status-item"><span class="status-label">{html.escape(label)}</span><strong class="status-value {"bad" if bad else ""}">{html.escape(value)}</strong></div>'
-        for label, value, bad in (
-            ("Modem AT interface", "Connected" if modem_present else "Missing", not modem_present),
-            ("Serial audio interface", "Connected" if audio_present else "Missing", not audio_present),
-            ("Asterisk", service_state("asterisk"), False),
-            ("Telegram bridge", service_state("dji-sms-bridge"), False),
-            ("Telegram configured", "Yes" if token_set and chat_id else "No", False),
-        )
-    )
     chats = ""
     if discovered is not None:
         items = "".join(f"<li><code>{html.escape(str(item['id']))}</code> — {html.escape(item.get('label', 'Telegram chat'))}</li>" for item in discovered)
         chats = f'<div class="notice"><strong>Recent chats</strong><ul>{items or "<li>None. Send the bot a message, then try again.</li>"}</ul></div>'
     replacements = {
         "@@BANNER@@": f'<div class="notice">{html.escape(message)}</div>' if message else "", "@@CHATS@@": chats,
-        "@@STATUS@@": status, "@@DATA_STATUS@@": html.escape(data_status), "@@CSRF@@": html.escape(CSRF_TOKEN, quote=True),
+        "@@CSRF@@": html.escape(CSRF_TOKEN, quote=True),
         "@@CSRF_JSON@@": json.dumps(CSRF_TOKEN), "@@TOKEN_PLACEHOLDER@@": "Saved — leave blank to keep it" if token_set else "123456:ABC…",
         "@@CHAT_ID@@": html.escape(str(chat_id), quote=True), "@@DASHBOARD_USERNAME@@": html.escape(dashboard_username(settings), quote=True),
         "@@MESSAGES_JSON@@": json.dumps(messages()).replace("</", "<\\/"),
+        "@@STATUS_JSON@@": json.dumps(gateway_status()).replace("</", "<\\/"),
+        "@@AT_INTERFACE@@": "Connected" if modem_present else "Missing",
+        "@@AUDIO_INTERFACE@@": "Connected" if audio_present else "Missing",
     }
-    document = HTML
+    document = REDESIGNED_HTML
     for marker, value in replacements.items():
         document = document.replace(marker, value)
     return document
@@ -406,6 +538,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authenticate(): return
         if path == "/": self.respond(page())
         elif path == "/messages": self.respond_json(messages())
+        elif path == "/api/status": self.respond_json(gateway_status())
         else: self.send_error(404)
 
     def do_POST(self) -> None:

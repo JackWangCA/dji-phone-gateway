@@ -95,19 +95,76 @@ class ConversationTests(unittest.TestCase):
         with (
             mock.patch.object(dashboard, "run", return_value=(0, "off")),
             mock.patch.object(dashboard, "messages", return_value=[]),
+            mock.patch.object(dashboard, "gateway_status", return_value={"registration": "Searching", "services": {}}),
         ):
             document = dashboard.page()
         self.assertIn('data-view="conversations"', document)
+        self.assertIn('data-view="status"', document)
+        self.assertIn('data-view="settings"', document)
         self.assertIn('id="new-message"', document)
+        self.assertIn('id="signal-value"', document)
+        self.assertIn('id="phone-number"', document)
         self.assertIn('id="access-form"', document)
         self.assertIn("/api/sms", document)
+        self.assertIn("/api/status", document)
         self.assertIn("/api/access", document)
         self.assertIn("preserveScroll", document)
         self.assertIn("touch-action:pan-y", document)
         self.assertIn('data-view="conversations" aria-selected="true"', document)
-        self.assertIn("location.hash==='#dashboard'?'dashboard':'conversations'", document)
+        self.assertIn("location.hash==='#status'?'status'", document)
         self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"', document)
         self.assertNotIn("@@", document)
+
+    def test_gateway_status_reports_live_sim_network_fields(self):
+        modem = {
+            "modem": {
+                "generic": {
+                    "state": "registered",
+                    "state-failed-reason": "--",
+                    "sim": "/org/freedesktop/ModemManager1/SIM/0",
+                    "unlock-required": "sim-pin2",
+                    "signal-quality": {"value": "73", "recent": "yes"},
+                    "access-technologies": ["lte"],
+                    "own-numbers": ["+15551234567"],
+                },
+                "3gpp": {
+                    "registration-state": "home",
+                    "operator-code": "46011",
+                    "operator-name": "--",
+                    "eps": {"initial-bearer": {"settings": {"apn": "CTNET"}}},
+                },
+            }
+        }
+        sim = {"sim": {"properties": {"operator-code": "46011", "operator-name": "--"}}}
+
+        def json_command(command, _timeout=8):
+            if command[1:3] == ["-L", "-J"]:
+                return {"modem-list": ["/org/freedesktop/ModemManager1/Modem/0"]}
+            if command[1] == "-m":
+                return modem
+            return sim
+
+        def command(command, _timeout=15):
+            if command[0] == "nmcli":
+                return 0, "yes\n"
+            if command[0] == "sudo":
+                return 0, "off (connection inactive)"
+            return 0, "active"
+
+        with (
+            mock.patch.object(dashboard, "_json_command", side_effect=json_command),
+            mock.patch.object(dashboard, "run", side_effect=command),
+            mock.patch.object(dashboard, "provider_name", return_value="China Telecom"),
+        ):
+            status = dashboard._gateway_status()
+        self.assertTrue(status["registered"])
+        self.assertEqual(status["registration"], "Registered")
+        self.assertEqual(status["signal"], 73)
+        self.assertEqual(status["carrier"], "China Telecom")
+        self.assertEqual(status["phone_number"], "+15551234567")
+        self.assertEqual(status["technology"], "LTE")
+        self.assertEqual(status["apn"], "CTNET")
+        self.assertEqual(status["apn_mode"], "Automatic")
 
     def test_home_screen_icon_assets_exist(self):
         self.assertTrue((dashboard.ASSET_DIR / "dji-phone-gateway-icon.svg").is_file())
