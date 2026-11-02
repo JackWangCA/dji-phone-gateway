@@ -91,6 +91,55 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(sent["direction"], "outgoing")
         self.assertIn("history could not be updated", sent["history_warning"])
 
+    def test_delete_selected_erases_contents_and_preserves_other_messages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = pathlib.Path(directory) / "messages.sqlite3"
+            with mock.patch.object(dashboard, "SMS_DATABASE", database):
+                first = dashboard.store_outgoing("+15551234567", "Delete this")
+                second = dashboard.store_outgoing("+15551234567", "Keep this")
+                self.assertEqual(dashboard.delete_messages(ids=str(first["id"])), 1)
+                self.assertEqual(dashboard.delete_messages(ids=str(first["id"])), 0)
+                self.assertEqual([m["id"] for m in dashboard.messages()], [second["id"]])
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute("SELECT sender, body FROM messages WHERE id = ?", (first["id"],)).fetchone(), ("", ""))
+
+    def test_delete_conversation_preserves_other_peers_and_new_arrivals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(dashboard, "SMS_DATABASE", pathlib.Path(directory) / "messages.sqlite3"):
+                first = dashboard.store_outgoing("+15551234567", "Old message")
+                other = dashboard.store_outgoing("+15557654321", "Other conversation")
+                arrival = dashboard.store_outgoing("+15551234567", "New arrival during confirmation")
+                self.assertEqual(dashboard.delete_messages(peer=first["peer"], before_id=str(first["id"])), 1)
+                self.assertEqual([m["id"] for m in dashboard.messages()], [other["id"], arrival["id"]])
+
+    def test_delete_all_does_not_reuse_message_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(dashboard, "SMS_DATABASE", pathlib.Path(directory) / "messages.sqlite3"):
+                first = dashboard.store_outgoing("+15551234567", "Old message")
+                dashboard.delete_messages(ids=str(first["id"]))
+                self.assertEqual(dashboard.messages(), [])
+                next_message = dashboard.store_outgoing(first["peer"], "New message")
+                self.assertGreater(next_message["id"], first["id"])
+
+    def test_delete_rejects_ambiguous_or_invalid_targets(self):
+        for kwargs in ({}, {"ids": "1 OR 1=1"}, {"ids": "0"}, {"ids": "-1"},
+                       {"ids": "1,2", "peer": "+15551234567"}, {"peer": "+15551234567"},
+                       {"ids": "9223372036854775808"}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                dashboard.delete_messages(**kwargs)
+
+    def test_delete_api_requires_authentication_and_csrf(self):
+        for authenticated, csrf in ((False, dashboard.CSRF_TOKEN), (True, "wrong-token")):
+            handler = mock.Mock()
+            handler.path = "/api/messages/delete"
+            handler.form.return_value = {"csrf": csrf, "ids": "1"}
+            handler.authenticate.return_value = authenticated
+            with mock.patch.object(dashboard, "delete_messages") as delete:
+                dashboard.Handler.do_POST(handler)
+            delete.assert_not_called()
+            if authenticated:
+                self.assertEqual(handler.respond_json.call_args.args[1], 403)
+
     def test_page_contains_separate_conversation_view(self):
         with (
             mock.patch.object(dashboard, "run", return_value=(0, "off")),

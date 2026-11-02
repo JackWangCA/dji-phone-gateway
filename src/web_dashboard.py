@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from contextlib import closing
 from functools import lru_cache
 from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
@@ -329,6 +330,8 @@ def ensure_message_schema(db: sqlite3.Connection) -> None:
     columns = {str(row[1]) for row in db.execute("PRAGMA table_info(messages)")}
     if "direction" not in columns:
         db.execute("ALTER TABLE messages ADD COLUMN direction TEXT NOT NULL DEFAULT 'incoming'")
+    if "deleted_at" not in columns:
+        db.execute("ALTER TABLE messages ADD COLUMN deleted_at TEXT")
 
 
 def messages(limit: int = 500) -> list[dict[str, object]]:
@@ -337,7 +340,8 @@ def messages(limit: int = 500) -> list[dict[str, object]]:
             ensure_message_schema(db)
             rows = db.execute(
                 "SELECT id, received_at, sender, body, direction FROM "
-                "(SELECT id, received_at, sender, body, direction FROM messages ORDER BY id DESC LIMIT ?) "
+                "(SELECT id, received_at, sender, body, direction FROM messages "
+                "WHERE deleted_at IS NULL ORDER BY id DESC LIMIT ?) "
                 "ORDER BY id ASC",
                 (limit,),
             ).fetchall()
@@ -353,6 +357,34 @@ def messages(limit: int = 500) -> list[dict[str, object]]:
         ]
     except sqlite3.Error:
         return []
+
+
+def delete_messages(ids: str = "", peer: str = "", before_id: str = "") -> int:
+    """Erase message contents, retaining ID tombstones to prevent ID reuse."""
+    def identifier(value: str) -> int:
+        if not re.fullmatch(r"[0-9]{1,19}", value) or not 0 < int(value) <= 2**63 - 1:
+            raise ValueError("Invalid message ID.")
+        return int(value)
+
+    if ids and not peer and not before_id:
+        values = ids.split(",")
+        if len(values) > 500:
+            raise ValueError("Select at most 500 messages.")
+        targets = [identifier(value) for value in values]
+        condition = "id IN (" + ",".join("?" for _ in targets) + ")"
+        parameters = targets
+    elif peer and before_id and not ids and len(peer) <= 100:
+        condition = "sender = ? AND id <= ?"
+        parameters = [peer, identifier(before_id)]
+    else:
+        raise ValueError("Select messages or a conversation to delete.")
+    with closing(sqlite3.connect(SMS_DATABASE, timeout=3)) as db, db:
+        ensure_message_schema(db)
+        cursor = db.execute(
+            "UPDATE messages SET sender = '', body = '', deleted_at = CURRENT_TIMESTAMP "
+            "WHERE deleted_at IS NULL AND " + condition, parameters,
+        )
+        return cursor.rowcount
 
 
 def store_outgoing(peer: str, body: str) -> dict[str, object]:
@@ -633,6 +665,9 @@ class Handler(BaseHTTPRequestHandler):
                 saved = send_sms(form.get("number", ""), form.get("message", ""))
                 if is_api: self.respond_json({"message": saved})
                 else: self.respond(page("SMS queued."))
+            elif path == "/api/messages/delete":
+                deleted = delete_messages(form.get("ids", ""), form.get("peer", ""), form.get("before_id", ""))
+                self.respond_json({"deleted": deleted, "messages": messages()})
             elif path == "/api/access":
                 save_dashboard_credentials(form.get("username", ""), form.get("password", ""), form.get("confirmation", ""))
                 self.respond_json({"ok": True})
