@@ -6,7 +6,7 @@ self.addEventListener('push',event=>{
   try{payload=event.data?.json()||{}}catch(_){}
   event.waitUntil(self.registration.showNotification(payload.title||'SMS Forwarder',{
     body:payload.body||'You have a new message.',
-    icon:'/apple-touch-icon.png',badge:'/apple-touch-icon.png',
+    icon:'/apple-touch-icon.png?v=2',badge:'/apple-touch-icon.png?v=2',
     tag:payload.tag||'sms',data:{url:payload.url||'/#conversations',peer:payload.peer||''}
   }));
 });

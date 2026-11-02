@@ -588,6 +588,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/apple-touch-icon.png":
             self.respond_asset("apple-touch-icon.png", "image/png")
             return
+        if path in ("/app-icon-192.png", "/app-icon-512.png", "/app-icon-1024.png"):
+            self.respond_asset(path[1:], "image/png")
+            return
         if path == "/sw.js":
             self.respond_asset("sw.js", "application/javascript; charset=utf-8")
             return

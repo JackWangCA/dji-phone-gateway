@@ -187,7 +187,7 @@ class ConversationTests(unittest.TestCase):
         self.assertIn('class="side"', document)
         self.assertNotIn('class="rail"', document)
         self.assertIn("location.hash==='#status'?'status'", document)
-        self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"', document)
+        self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2"', document)
         self.assertNotIn("@@", document)
 
     def test_dashboard_injects_safe_config_without_bot_token(self):

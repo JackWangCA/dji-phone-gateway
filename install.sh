@@ -112,6 +112,9 @@ install -m 0644 "$src_dir/src/dashboard_ui.py" "$install_root/src/dashboard_ui.p
 install -m 0644 "$src_dir/src/dashboard.html" "$install_root/src/dashboard.html"
 install -m 0644 "$src_dir/src/dji-phone-gateway-icon.svg" "$install_root/src/dji-phone-gateway-icon.svg"
 install -m 0644 "$src_dir/src/apple-touch-icon.png" "$install_root/src/apple-touch-icon.png"
+install -m 0644 "$src_dir/src/app-icon-192.png" "$install_root/src/app-icon-192.png"
+install -m 0644 "$src_dir/src/app-icon-512.png" "$install_root/src/app-icon-512.png"
+install -m 0644 "$src_dir/src/app-icon-1024.png" "$install_root/src/app-icon-1024.png"
 asterisk_agidir=$(pkg-config --variable=agidir asterisk)
 install -d -o asterisk -g asterisk -m 0755 "$asterisk_agidir"
 install -m 0755 "$src_dir/bin/telegram-notify" "$asterisk_agidir/telegram-notify"
