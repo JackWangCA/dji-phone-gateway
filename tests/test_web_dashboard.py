@@ -172,6 +172,8 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(status["technology"], "LTE")
         self.assertEqual(status["firmware"], "QDC507GLEFM21")
         self.assertEqual(status["carrier_profile"], "Commercial-TMO_VoLTE")
+        self.assertEqual(status["sim_home_operator"], "China Telecom · 46011")
+        self.assertEqual(status["profile_selection"], "Automatic")
         self.assertEqual(status["apn"], "CTNET")
         self.assertEqual(status["apn_mode"], "Automatic")
 

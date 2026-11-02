@@ -34,6 +34,7 @@ PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 SETTINGS_PATH = Path(os.getenv("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json"))
 SMS_DATABASE = Path(os.getenv("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3"))
+CARRIER_PROFILE_STATE = Path(os.getenv("CARRIER_PROFILE_STATE", "/var/lib/dji-phone-gateway/carrier-profile.json"))
 ASSET_DIR = Path(__file__).resolve().parent
 CSRF_TOKEN = secrets.token_urlsafe(32)
 SETTINGS_LOCK = threading.Lock()
@@ -214,6 +215,9 @@ def _gateway_status() -> dict[str, object]:
         "modem_state": "Unavailable",
         "firmware": "Unavailable",
         "carrier_profile": "Unavailable",
+        "profile_selection": "Automatic",
+        "profile_status": "Waiting for status",
+        "sim_home_operator": "Unavailable",
         "apn": "Automatic",
         "apn_mode": "Automatic",
         "data": "Unavailable",
@@ -264,6 +268,9 @@ def _gateway_status() -> dict[str, object]:
                 properties = sim.get("properties", {}) if isinstance(sim, dict) and isinstance(sim.get("properties"), dict) else {}
                 sim_operator_name = useful(properties.get("operator-name"))
                 sim_operator_code = useful(properties.get("operator-code"))
+                if sim_operator_code:
+                    home_name = sim_operator_name or provider_name(sim_operator_code)
+                    status["sim_home_operator"] = f"{home_name} · {sim_operator_code}" if home_name else sim_operator_code
             operator_code = useful(gpp.get("operator-code")) or sim_operator_code
             carrier = useful(gpp.get("operator-name")) or sim_operator_name or provider_name(operator_code)
             status["operator_code"] = operator_code
@@ -290,7 +297,15 @@ def _gateway_status() -> dict[str, object]:
         "Telegram": service_state("dji-sms-bridge"),
         "Dashboard": service_state("dji-dashboard"),
         "ModemManager": service_state("ModemManager"),
+        "Carrier profiles": service_state("dji-carrier-profile.timer"),
     }
+    try:
+        profile_state = json.loads(CARRIER_PROFILE_STATE.read_text(encoding="utf-8"))
+        if isinstance(profile_state, dict):
+            status["profile_selection"] = str(profile_state.get("mode") or "automatic").title()
+            status["profile_status"] = str(profile_state.get("status") or "Monitoring SIM and registration")
+    except (OSError, json.JSONDecodeError):
+        pass
     return status
 
 

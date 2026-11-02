@@ -1,0 +1,12 @@
+[Unit]
+Description=Automatically reconcile DJI modem carrier profile
+After=ModemManager.service NetworkManager.service
+Wants=ModemManager.service NetworkManager.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/dji-phone-gateway/gateway.env
+ExecStart=/opt/dji-phone-gateway/src/carrier_profile.py
+
+[Install]
+WantedBy=multi-user.target

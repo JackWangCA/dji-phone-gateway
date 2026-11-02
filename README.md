@@ -106,6 +106,13 @@ CELLULAR_APN=
 
 Leave `CELLULAR_APN` blank to select the APN automatically from the SIM's operator identity using NetworkManager and the Mobile Broadband Provider database. If a carrier is missing from that database, set `CELLULAR_APN` to the value supplied by the carrier as a manual override. The profile never autoconnects, and call/SMS registration does not require a NetworkManager data session.
 
+Carrier firmware selection is also automatic. `dji-carrier-profile.timer` discovers the current ModemManager index, gives the modem two minutes to select and register with its embedded carrier bundle, and leaves any working registration untouched. If registration fails, it tests only compatible profiles already installed in the modem, restores the original when none work, and waits six hours before retrying. Inspect its decision with:
+
+```sh
+sudo /opt/dji-phone-gateway/src/carrier_profile.py --status
+sudo /opt/dji-phone-gateway/src/carrier_profile.py --dry-run --force
+```
+
 ## Security
 
 - Keep SIP on Wi-Fi/VPN; the generated PJSIP ACL accepts RFC1918/ULA addresses only.

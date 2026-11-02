@@ -102,6 +102,7 @@ install -m 0755 "$src_dir/bin/dji-data" "$install_root/bin/dji-data"
 install -m 0755 "$src_dir/bin/dji-gateway-diag" "$install_root/bin/dji-gateway-diag"
 install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"
 install -m 0755 "$src_dir/src/web_dashboard.py" "$install_root/src/web_dashboard.py"
+install -m 0755 "$src_dir/src/carrier_profile.py" "$install_root/src/carrier_profile.py"
 install -m 0644 "$src_dir/src/dashboard_ui.py" "$install_root/src/dashboard_ui.py"
 install -m 0644 "$src_dir/src/dji-phone-gateway-icon.svg" "$install_root/src/dji-phone-gateway-icon.svg"
 install -m 0644 "$src_dir/src/apple-touch-icon.png" "$install_root/src/apple-touch-icon.png"
@@ -115,6 +116,8 @@ printf 'qmi_wwan\n' > /etc/modules-load.d/dji-qmi.conf
 install -m 0644 "$src_dir/systemd/dji-sms-bridge.service" /etc/systemd/system/dji-sms-bridge.service
 install -m 0644 "$src_dir/systemd/dji-data-off.service" /etc/systemd/system/dji-data-off.service
 install -m 0644 "$src_dir/systemd/dji-dashboard.service" /etc/systemd/system/dji-dashboard.service
+install -m 0644 "$src_dir/systemd/dji-carrier-profile.service" /etc/systemd/system/dji-carrier-profile.service
+install -m 0644 "$src_dir/systemd/dji-carrier-profile.timer" /etc/systemd/system/dji-carrier-profile.timer
 printf 'djigateway ALL=(root) NOPASSWD: /opt/dji-phone-gateway/bin/dji-data on, /opt/dji-phone-gateway/bin/dji-data off, /opt/dji-phone-gateway/bin/dji-data status, /usr/bin/systemctl restart dji-sms-bridge.service\n' > /etc/sudoers.d/dji-phone-gateway
 chmod 0440 /etc/sudoers.d/dji-phone-gateway
 
@@ -175,12 +178,13 @@ udevadm control --reload-rules
 udevadm trigger
 modprobe qmi_wwan 2>/dev/null || true
 systemctl daemon-reload
-systemctl enable asterisk dji-data-off.service dji-sms-bridge.service dji-dashboard.service
+systemctl enable asterisk dji-data-off.service dji-sms-bridge.service dji-dashboard.service dji-carrier-profile.timer
 systemctl enable ModemManager.service
 systemctl restart ModemManager.service
 systemctl restart asterisk
 systemctl start dji-data-off.service
 systemctl restart dji-dashboard.service
+systemctl start dji-carrier-profile.timer
 
 echo
 echo "Installed. SIP user: iphone"

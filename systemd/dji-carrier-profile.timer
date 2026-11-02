@@ -1,0 +1,12 @@
+[Unit]
+Description=Monitor DJI modem SIM and carrier profile
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=3min
+AccuracySec=15s
+Persistent=true
+Unit=dji-carrier-profile.service
+
+[Install]
+WantedBy=timers.target
