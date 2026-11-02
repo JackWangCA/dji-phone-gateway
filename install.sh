@@ -104,6 +104,7 @@ install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"
 install -m 0755 "$src_dir/src/web_dashboard.py" "$install_root/src/web_dashboard.py"
 install -m 0755 "$src_dir/src/carrier_profile.py" "$install_root/src/carrier_profile.py"
 install -m 0644 "$src_dir/src/dashboard_ui.py" "$install_root/src/dashboard_ui.py"
+install -m 0644 "$src_dir/src/dashboard.html" "$install_root/src/dashboard.html"
 install -m 0644 "$src_dir/src/dji-phone-gateway-icon.svg" "$install_root/src/dji-phone-gateway-icon.svg"
 install -m 0644 "$src_dir/src/apple-touch-icon.png" "$install_root/src/apple-touch-icon.png"
 asterisk_agidir=$(pkg-config --variable=agidir asterisk)

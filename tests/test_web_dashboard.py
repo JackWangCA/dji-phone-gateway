@@ -98,18 +98,11 @@ class ConversationTests(unittest.TestCase):
             mock.patch.object(dashboard, "gateway_status", return_value={"registration": "Searching", "services": {}}),
         ):
             document = dashboard.page()
-        self.assertIn('data-view="conversations"', document)
-        self.assertIn('data-view="status"', document)
-        self.assertIn('data-view="settings"', document)
+        self.assertIn('<main id="main"', document)
         self.assertIn('id="new-message"', document)
         self.assertIn('id="conversation-search"', document)
-        self.assertIn('id="thread-back"', document)
         self.assertIn('id="jump-latest"', document)
         self.assertIn('id="signal-value"', document)
-        self.assertIn('id="phone-number"', document)
-        self.assertIn('id="firmware"', document)
-        self.assertIn('id="carrier-profile"', document)
-        self.assertIn('id="sim-home-operator"', document)
         self.assertIn('id="profile-selection"', document)
         self.assertIn('id="refresh-status"', document)
         self.assertIn('id="access-form"', document)
@@ -118,10 +111,25 @@ class ConversationTests(unittest.TestCase):
         self.assertIn("/api/access", document)
         self.assertIn("preserveScroll", document)
         self.assertIn("touch-action:pan-y", document)
-        self.assertIn('data-view="conversations" aria-selected="true"', document)
+        self.assertIn('class="sheet"', document)
+        self.assertIn('class="side"', document)
+        self.assertNotIn('class="rail"', document)
         self.assertIn("location.hash==='#status'?'status'", document)
         self.assertIn('rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"', document)
         self.assertNotIn("@@", document)
+
+    def test_dashboard_injects_safe_config_without_bot_token(self):
+        settings = {"telegram_bot_token": "private-bot-token", "telegram_chat_id": 42,
+                    "dashboard_username": "</script><script>bad</script>"}
+        with (
+            mock.patch.object(dashboard, "load_settings", return_value=settings),
+            mock.patch.object(dashboard, "messages", return_value=[]),
+            mock.patch.object(dashboard, "gateway_status", return_value={}),
+        ):
+            document = dashboard.page()
+        self.assertNotIn("private-bot-token", document)
+        self.assertNotIn("</script><script>bad", document)
+        self.assertIn('"telegram_configured": true', document)
 
     def test_gateway_status_reports_live_sim_network_fields(self):
         modem = {

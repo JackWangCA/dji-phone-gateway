@@ -468,6 +468,13 @@ def page(message: str = "", discovered: list[dict] | None = None) -> str:
         "@@CHAT_ID@@": html.escape(str(chat_id), quote=True), "@@DASHBOARD_USERNAME@@": html.escape(dashboard_username(settings), quote=True),
         "@@MESSAGES_JSON@@": json.dumps(messages()).replace("</", "<\\/"),
         "@@STATUS_JSON@@": json.dumps(gateway_status()).replace("</", "<\\/"),
+        "@@CONFIG_JSON@@": json.dumps({
+            "telegram_configured": token_set,
+            "chat_id": str(chat_id),
+            "username": dashboard_username(settings),
+            "at_interface": "Connected" if modem_present else "Missing",
+            "audio_interface": "Connected" if audio_present else "Missing",
+        }).replace("</", "<\\/"),
         "@@AT_INTERFACE@@": "Connected" if modem_present else "Missing",
         "@@AUDIO_INTERFACE@@": "Connected" if audio_present else "Missing",
     }

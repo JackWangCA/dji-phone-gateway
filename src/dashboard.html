@@ -1,0 +1,214 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>SMS Forwarder</title><meta name="theme-color" content="#f2f2f7"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="SMS Forwarder"><link rel="icon" type="image/svg+xml" href="/icon.svg"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><style>
+:root{
+  --bg:#f2f2f7;--card:#fff;--label:#000;--label2:rgba(60,60,67,.6);--label3:rgba(60,60,67,.3);
+  --sep:rgba(60,60,67,.18);--fill:rgba(120,120,128,.12);--blue:#007aff;--green:#34c759;--red:#ff3b30;--orange:#ff9500;
+  --glass:rgba(249,249,249,.78);--bubble:#e9e9eb;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#000;--card:#1c1c1e;--label:#fff;--label2:rgba(235,235,245,.6);--label3:rgba(235,235,245,.3);
+  --sep:rgba(84,84,88,.6);--fill:rgba(120,120,128,.24);--blue:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;
+  --glass:rgba(30,30,30,.78);--bubble:#26262a;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000;--card:#1c1c1e;--label:#fff;--label2:rgba(235,235,245,.6);--label3:rgba(235,235,245,.3);
+  --sep:rgba(84,84,88,.6);--fill:rgba(120,120,128,.24);--blue:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;
+  --glass:rgba(30,30,30,.78);--bubble:#26262a;color-scheme:dark}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--label);font:17px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:8px}
+
+.app{display:flex;height:100%}
+nav.side{width:240px;flex:none;background:var(--glass);backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);border-right:.5px solid var(--sep);padding:20px 12px;display:flex;flex-direction:column;gap:2px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 10px 18px;font-weight:600;font-size:15px}
+.brand i{width:30px;height:30px;border-radius:8px;background:linear-gradient(#5ac8fa,#007aff);display:grid;place-items:center;color:#fff;font-style:normal;font-size:16px}
+.nav-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:15px;text-align:left;width:100%}
+.nav-btn svg{width:20px;height:20px;stroke:var(--blue);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.nav-btn[aria-current=page]{background:var(--fill);font-weight:600}
+.nav-btn .badge{margin-left:auto}
+.badge{background:var(--red);color:#fff;font-size:12px;font-weight:600;border-radius:10px;min-width:20px;height:20px;padding:0 6px;display:grid;place-items:center}
+main{flex:1;overflow-y:auto;padding:24px 20px 40px;scroll-padding-top:60px}
+.page{max-width:680px;margin:0 auto}
+h1{font-size:34px;line-height:1.1;font-weight:700;letter-spacing:.2px;margin:8px 0 16px}
+.search{display:flex;align-items:center;gap:6px;background:var(--fill);border-radius:10px;padding:7px 10px;margin-bottom:20px}
+.search input{flex:1;background:none;border:0;font:inherit;font-size:17px;color:var(--label);outline:0;min-width:0}
+.search input::placeholder{color:var(--label2)}
+.search svg{width:16px;height:16px;stroke:var(--label2);fill:none;stroke-width:2;stroke-linecap:round}
+.sec-title{font-size:13px;color:var(--label2);text-transform:uppercase;letter-spacing:-.1px;padding:0 16px 6px;margin-top:24px}
+.sec-foot{font-size:13px;color:var(--label2);padding:6px 16px 0}
+.group{background:var(--card);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:11px 16px;min-height:44px;width:100%;text-align:left;position:relative}
+.row+.row::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--sep)}
+button.row:active{background:var(--fill)}
+.row .grow{flex:1;min-width:0}
+.row .t{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .s{display:block;font-size:15px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .meta{font-size:15px;color:var(--label2);flex:none}
+.chev{width:8px;height:14px;stroke:var(--label3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.avatar{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff;font-weight:600;font-size:17px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--blue);flex:none}
+.row.convo{padding:10px 16px 10px 12px}
+.row.convo .top{display:flex;justify-content:space-between;gap:8px}
+.row.convo .t{font-weight:600}
+.row.convo .s{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:1px 7px;border-radius:6px;background:var(--fill);color:var(--label2);margin-top:3px}
+.tag.ok{color:var(--green)}.tag.fail{color:var(--red)}
+.icon{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:#fff;flex:none}
+.icon svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* switch */
+.sw{width:51px;height:31px;border-radius:16px;background:var(--fill);position:relative;flex:none;transition:background .25s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.15),0 1px 1px rgba(0,0,0,.16);transition:transform .25s cubic-bezier(.3,1.4,.5,1)}
+.sw[aria-checked=true]{background:var(--green)}
+.sw[aria-checked=true]::after{transform:translateX(20px)}
+
+/* segmented */
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin-bottom:16px}
+.seg button{flex:1;padding:6px 8px;border-radius:7px;font-size:13px;font-weight:500}
+.seg button[aria-pressed=true]{background:var(--card);box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04);font-weight:600}
+
+/* status */
+.hero{background:var(--card);border-radius:12px;padding:20px 16px;display:flex;align-items:center;gap:16px;margin-bottom:8px}
+.hero .big{width:56px;height:56px;border-radius:50%;background:var(--green);display:grid;place-items:center;flex:none}
+.hero .big.off{background:var(--red)}
+.hero .big svg{width:28px;height:28px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.hero h2{font-size:22px;font-weight:700}
+.hero p{color:var(--label2);font-size:15px}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px}
+.tile{background:var(--card);border-radius:12px;padding:14px 16px}
+.tile .k{font-size:13px;color:var(--label2);display:flex;align-items:center;gap:6px}
+.tile .v{font-size:28px;font-weight:700;letter-spacing:.3px;margin:2px 0 8px}
+.tile .v small{font-size:15px;font-weight:500;color:var(--label2);margin-left:2px}
+.bar{height:6px;border-radius:3px;background:var(--fill);overflow:hidden}
+.bar b{display:block;height:100%;border-radius:3px;background:var(--blue)}
+.sigbars{display:flex;gap:3px;align-items:flex-end;height:22px;margin-bottom:6px}
+.sigbars i{width:5px;border-radius:2px;background:var(--fill)}
+.sigbars i.on{background:var(--label)}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .3s;z-index:20}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:50%;bottom:0;width:min(560px,100%);height:min(86%,720px);background:var(--bg);border-radius:14px 14px 0 0;transform:translate(-50%,105%);transition:transform .38s cubic-bezier(.32,.72,0,1);z-index:21;display:flex;flex-direction:column;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0px)}
+.sheet.show{transform:translate(-50%,0)}
+.sheet-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--glass);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-bottom:.5px solid var(--sep);flex:none}
+.sheet-bar b{font-size:17px;font-weight:600}
+.link{color:var(--blue);font-size:17px}.link.bold{font-weight:600}
+.sheet-body{flex:1;overflow-y:auto;padding:16px}
+.bubbles{display:flex;flex-direction:column;gap:4px;padding:8px 0}
+.msg{max-width:78%;padding:8px 14px;border-radius:18px;background:var(--bubble);align-self:flex-start;font-size:17px;overflow-wrap:anywhere}
+.stamp{align-self:center;font-size:12px;color:var(--label2);margin:10px 0 4px}
+.fwd{align-self:flex-start;font-size:12px;color:var(--label2);margin:2px 0 8px 8px}
+.field{width:100%;padding:0;background:none;border:0;font:inherit;color:var(--label);outline:0;text-align:right;min-width:0}
+.field::placeholder{color:var(--label3)}
+.field.left{text-align:left}
+.btn{display:block;width:100%;padding:14px;border-radius:12px;background:var(--card);color:var(--blue);font-weight:600;text-align:center;margin-top:24px}
+.btn.danger{color:var(--red)}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 14px);transform:translate(-50%,-80px);background:var(--glass);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);border-radius:22px;padding:10px 18px;font-size:15px;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.18);transition:transform .4s cubic-bezier(.32,.72,0,1);z-index:30}
+.toast.show{transform:translate(-50%,0)}
+.empty{text-align:center;color:var(--label2);padding:40px 16px}
+
+/* tab bar on small screens */
+@media (max-width:800px){
+  .app{flex-direction:column-reverse}
+  nav.side{width:100%;flex-direction:row;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));border-right:0;border-top:.5px solid var(--sep);justify-content:space-around;gap:0}
+  .brand{display:none}
+  .nav-btn{flex-direction:column;gap:2px;font-size:10px;padding:4px 0;width:auto;flex:1;justify-content:center;align-items:center;position:relative;border-radius:8px}
+  .nav-btn[aria-current=page]{background:none}
+  .nav-btn[aria-current=page] span{color:var(--blue)}
+  .nav-btn svg{width:24px;height:24px}
+  .nav-btn:not([aria-current=page]) svg{stroke:var(--label2)}
+  .nav-btn .badge{position:absolute;top:0;left:calc(50% + 6px);margin:0;min-width:18px;height:18px;font-size:11px}
+  main{padding:12px 16px 24px}
+  h1{font-size:34px}
+  .tile .v{font-size:24px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:root{padding-bottom:0}
+
+/* Gateway integrations within the reference's original components. */
+html{height:100%;height:100dvh}main{min-width:0;min-height:0}.side{flex-shrink:0}.brand i svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:1.8}.page-heading{display:flex;align-items:center;justify-content:space-between}.compose{display:grid;place-items:center;width:44px;height:44px;color:var(--blue)}.compose svg{width:25px;height:25px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}.row .meta.wrap{max-width:62%;text-align:right;white-space:normal;overflow-wrap:anywhere}.row .s.wrap{white-space:normal}.tile .v.compact{font-size:20px;overflow-wrap:anywhere}.title-icon{width:30px;height:30px}.title-icon svg{width:20px;height:20px}.msg.outgoing{align-self:flex-end;background:var(--blue);color:#fff}.msg.pending{opacity:.6}.msg-time{font-size:11px;display:block;opacity:.65;margin-top:4px}.composer{display:flex;gap:8px;align-items:flex-end;padding:10px 12px;border-top:.5px solid var(--sep);background:var(--glass);flex:none}.composer textarea{flex:1;min-width:0;min-height:38px;max-height:120px;border:1px solid var(--sep);border-radius:19px;padding:8px 12px;resize:none;background:var(--card);color:var(--label);font:inherit}.composer button{width:38px;height:38px;flex:none;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center}.composer svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2}.error-inline{padding:10px 16px;color:var(--red);font-size:14px;background:var(--card)}.sheet{visibility:hidden}.sheet.show{visibility:visible}.sheet:not(.show){transition:transform .38s cubic-bezier(.32,.72,0,1),visibility 0s .38s}.sheet-bar b{max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sheet-bar button{min-width:60px;min-height:30px}.sheet-body{min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}.bubbles .msg{white-space:pre-wrap}.new-message-animation{animation:message-in .25s ease both}@keyframes message-in{from{opacity:0;transform:translateY(8px)}}.field-row{margin:0}.field-row input{max-width:70%}.multiline-field{display:block;width:100%;min-height:160px;border:0;padding:14px 16px;resize:vertical;background:var(--card);color:var(--label);font:inherit}.sheet-actions{padding:0 16px 16px}.sheet-actions .btn{margin-top:12px}.updated{padding:12px 16px;color:var(--label2);font-size:12px}.notice{margin-bottom:16px;padding:12px 16px;background:var(--card);border-radius:12px;font-size:15px;overflow-wrap:anywhere}.notice ul{padding-left:20px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.jump{position:absolute;bottom:76px;right:16px;background:var(--card);border:1px solid var(--sep);border-radius:20px;padding:8px 12px;color:var(--blue);font-size:13px}[hidden]{display:none!important}.toast{max-width:calc(100% - 30px);text-align:center;pointer-events:none}button:disabled{opacity:.5;cursor:wait}.sec-title:first-of-type{margin-top:8px}
+@media(max-width:800px){nav.side{flex-shrink:0}.nav-btn{min-height:45px}.app main{flex:1}nav.side .brand{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}}
+</style></head><body><div class="app"><nav class="side" aria-label="Main"><div class="brand"><i><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></i>SMS Forwarder</div><div id="nav" style="display:contents"></div></nav><main id="main" tabindex="-1"></main></div><div class="scrim" id="scrim"></div><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true"></div><div class="toast" id="toast" role="status"></div><div id="announcer" class="sr-only" role="status" aria-live="polite"></div><template id="server-notices">@@BANNER@@@@CHATS@@</template><script>
+const ICON={
+  msg:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+  rules:'<path d="M4 6h16M7 12h10M10 18h4"/>',
+  pulse:'<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  check:'<path d="M5 12l5 5L20 7"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  send:'<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+  link:'<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  bell:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>'
+};
+const svg=(n,c='')=>`<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]||ICON.msg}</svg>`;
+const chev='<svg class="chev" viewBox="0 0 8 14" aria-hidden="true"><path d="M1 1l6 6-6 6"/></svg>';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const colors=['#ff9500','#34c759','#5856d6','#ff2d55','#007aff','#af52de','#00c7be'];
+const csrf=@@CSRF_JSON@@, config=@@CONFIG_JSON@@;
+let allMessages=@@MESSAGES_JSON@@,status=@@STATUS_JSON@@;
+function readLocal(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch(_){return fallback}}
+function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(_){}}
+const S={tab:location.hash==='#status'?'status':location.hash==='#settings'?'settings':location.hash==='#forwarding'?'forwarding':'messages',q:'',filter:'all',read:readLocal('dji-read-v1',{}),theme:readLocal('dji-theme','auto'),sheet:null,peer:null,busy:false};
+let pending=[],lastFocus=null,fetchingMessages=false,fetchingStatus=false;
+const main=document.getElementById('main'),sheet=document.getElementById('sheet'),app=document.querySelector('.app');
+function applyTheme(){if(S.theme==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=S.theme}
+applyTheme();
+function toast(text){const e=document.getElementById('toast');e.textContent=text;e.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>e.classList.remove('show'),3000)}
+function date(v){const text=String(v);return new Date(text.replace(' ','T')+(text.includes('T')?'':'Z'))}
+function time(v){const d=date(v);if(Number.isNaN(d.getTime()))return v;return d.toDateString()===new Date().toDateString()?d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):d.toLocaleDateString([],{month:'short',day:'numeric'})}
+function phone(v){const d=String(v).replace(/\D/g,'');return d.length===11&&d[0]==='1'?`+1 (${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`:v}
+function groups(){const m=new Map();for(const x of [...allMessages,...pending]){if(!m.has(x.peer))m.set(x.peer,[]);m.get(x.peer).push(x)}return [...m.entries()].map(([peer,items])=>({peer,items,last:items.at(-1)})).sort((a,b)=>Number(b.last.id)-Number(a.last.id))}
+function unread(c){return c.items.some(m=>m.direction==='incoming'&&Number(m.id)>Number(S.read[c.peer]||0))}
+function unreadCount(){return groups().filter(unread).length}
+function sw(on,attr){return `<button type="button" class="sw" role="switch" aria-checked="${on}" ${attr}></button>`}
+function icon(name,color){return `<span class="icon" style="background:${color}">${svg(name)}</span>`}
+function row(label,value,id=''){return `<div class="row"><span class="grow t">${esc(label)}</span><span class="meta wrap" ${id?`id="${id}"`:''}>${esc(value||'Unavailable')}</span></div>`}
+function title(text){return `<div class="sec-title">${esc(text)}</div>`}
+function formRow(label,name,value='',type='text',placeholder=''){return `<label class="row field-row"><span class="t">${esc(label)}</span><input class="field" type="${type}" name="${name}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(label)}" ${type==='password'?'autocomplete="new-password"':''}></label>`}
+function renderNav(){const items=[['messages','Messages','msg'],['forwarding','Forwarding','rules'],['status','Status','pulse'],['settings','Settings','gear']];document.getElementById('nav').innerHTML=items.map(([key,label,i])=>`<button class="nav-btn" data-tab="${key}" data-view="${key==='messages'?'conversations':key}" aria-selected="${S.tab===key}" ${S.tab===key?'aria-current="page"':''}>${svg(i)}<span>${label}</span>${key==='messages'&&unreadCount()?`<b class="badge">${unreadCount()}</b>`:''}</button>`).join('')}
+function messagesView(){const q=S.q.toLowerCase();const entries=groups().filter(c=>(S.filter==='all'||S.filter==='unread'&&unread(c)||S.filter==='sent'&&c.items.some(m=>m.direction==='outgoing'))&&(!q||phone(c.peer).toLowerCase().includes(q)||c.items.some(m=>m.body.toLowerCase().includes(q))));return `<div class="page"><div class="page-heading"><h1>Messages</h1><button id="new-message" class="compose" aria-label="New message"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div><label class="search">${svg('search')}<input id="conversation-search" type="search" placeholder="Search" value="${esc(S.q)}" aria-label="Search messages"></label><div class="seg" role="group" aria-label="Filter">${['all','unread','sent'].map(f=>`<button data-filter="${f}" aria-pressed="${S.filter===f}">${f[0].toUpperCase()+f.slice(1)}</button>`).join('')}</div>${entries.length?`<div class="group">${entries.map(c=>{const hash=[...c.peer].reduce((sum,x)=>sum+x.charCodeAt(0),0);return `<button class="row convo" data-open="${esc(c.peer)}"><span class="avatar" style="background:${colors[hash%colors.length]}">${esc(c.peer.replace(/[^A-Za-z0-9]/g,'').slice(-2)||'#')}</span><span class="grow"><span class="top"><span class="t">${esc(phone(c.peer))}</span><span class="meta">${esc(time(c.last.timestamp))}</span></span><span class="s">${esc((c.last.direction==='outgoing'?'You: ':'')+c.last.body)}</span><span class="tag">${c.last.pending?'Sending…':c.last.direction==='outgoing'?'Sent SMS':'Received SMS'}</span></span>${unread(c)?'<span class="dot" aria-label="Unread"></span>':''}</button>`}).join('')}</div>`:`<div class="empty">${S.q||S.filter!=='all'?'No messages match. Try a different search or filter.':'No messages yet. Incoming SMS and messages you send will appear here.'}</div>`}</div>`}
+function dataOn(){return String(status.data||'').startsWith('on')}
+function forwardingView(){return `<div class="page"><h1>Forwarding</h1><div class="group"><button class="row" data-edit="telegram">${icon('send','#32ade6')}<span class="grow"><span class="t">Telegram</span><span class="s">${config.telegram_configured?'Chat '+esc(config.chat_id):'Not set up'}</span></span><span class="meta">${status.services?.Telegram==='active'?'Active':'Set up'}</span>${chev}</button><div class="row"><span class="grow"><span class="t">Incoming messages</span><span class="s">All received SMS → Telegram</span></span><span class="tag ${status.services?.Telegram==='active'?'ok':''}">${status.services?.Telegram==='active'?'On':'Inactive'}</span></div><div class="row"><span class="grow"><span class="t">Replies</span><span class="s">Quote an SMS in Telegram to reply from the SIM</span></span></div></div><p class="sec-foot">Telegram replies must quote a forwarded SMS so the gateway can identify the recipient.</p>${title('Cellular')}<div class="group"><div class="row">${icon('pulse','var(--green)')}<span class="grow"><span class="t">Mobile data</span><span class="s">SMS works with data off</span></span>${sw(dataOn(),'id="data-switch" data-data aria-label="Mobile data"')}</div><div class="row"><span class="grow"><span class="t">Carrier selection</span><span class="s wrap" id="profile-status">${esc(status.profile_status||'Waiting for status')}</span></span><span class="meta" id="profile-selection">${esc(status.profile_selection||'Automatic')}</span></div></div><p class="sec-foot">The gateway discovers the SIM and chooses from the modem’s installed carrier profiles.</p></div>`}
+function statusView(){const online=!!status.registered;const bars=[8,12,16,22].map((h,i)=>`<i style="height:${h}px" class="${Number(status.signal)>i*25?'on':''}"></i>`).join('');const incoming=allMessages.filter(m=>m.direction==='incoming').length,outgoing=allMessages.length-incoming;const services=Object.entries(status.services||{}),active=services.filter(([,v])=>v==='active').length;return `<div class="page"><h1>Status</h1><div class="hero"><span class="big ${online?'':'off'}">${svg(online?'check':'x')}</span><div><h2>${online?'Connected to '+esc(status.carrier):esc(status.registration||'Checking modem')}</h2><p>${online?esc(status.registration)+' · '+esc(status.technology):esc(status.sim_status||'Reading SIM')}</p></div></div><div class="tiles"><div class="tile"><div class="k">Signal</div><div class="sigbars" aria-label="${esc(status.signal||0)} percent">${bars}</div><div class="v" id="signal-value" style="font-size:20px;margin:0">${esc(status.signal||0)}<small>%</small></div></div><div class="tile"><div class="k">Message history</div><div class="v">${allMessages.length}</div><div class="k">${incoming} received · ${outgoing} sent</div></div><div class="tile"><div class="k">Services</div><div class="v">${active}<small>of ${services.length}</small></div><div class="bar"><b style="width:${services.length?100*active/services.length:0}%;background:var(--green)"></b></div></div><div class="tile"><div class="k">Mobile data</div><div class="v compact">${dataOn()?'On':'Off'}</div><div class="k">${dataOn()?'Cellular internet enabled':'Wi-Fi for internet'}</div></div></div>${title('Device')}<div class="group">${row('Carrier',status.carrier)}${row('Registration',status.registration)}${row('SIM',status.sim_status)}${row('Phone number',status.phone_number,'phone-number')}${row('Home network',status.sim_home_operator,'sim-home-operator')}${row('Radio',status.technology)}${row('APN',status.apn)}${row('APN selection',status.apn_mode)}${row('Carrier profile',status.carrier_profile,'carrier-profile')}</div>${title('Services')}<div class="group">${services.map(([name,v])=>`<div class="row"><span class="grow t">${esc(name)}</span><span class="tag ${v==='active'?'ok':'fail'}">${esc(v)}</span></div>`).join('')}</div><button class="btn" id="refresh-status">Refresh status</button><p class="updated">${status.updated_at?'Updated '+esc(time(new Date(status.updated_at*1000).toISOString())):'Waiting for status'}</p></div>`}
+function settingsView(){return `<div class="page"><h1>Settings</h1>${title('Destinations')}<div class="group"><button class="row" data-edit="telegram">${icon('send','#32ade6')}<span class="grow t">Telegram</span><span class="meta">${config.telegram_configured?'Configured':'Not set up'}</span>${chev}</button></div>${title('General')}<div class="group"><button class="row" data-edit="access">${icon('gear','var(--blue)')}<span class="grow t">Dashboard access</span><span class="meta">${esc(config.username)}</span>${chev}</button><button class="row" data-edit="hardware">${icon('pulse','#8e8e93')}<span class="grow t">Hardware</span><span class="meta">${esc(status.modem_state||'Checking')}</span>${chev}</button></div>${title('Appearance')}<div class="seg" role="group" aria-label="Appearance">${['auto','light','dark'].map(t=>`<button data-theme="${t}" aria-pressed="${S.theme===t}">${t==='auto'?'Automatic':t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div><form method="post" action="/logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn danger">Sign out</button></form></div>`}
+function render(){const scroll=main.scrollTop;renderNav();main.innerHTML=({messages:messagesView,forwarding:forwardingView,status:statusView,settings:settingsView}[S.tab])();main.scrollTop=scroll}
+function openSheet(content,kind){lastFocus=document.activeElement;S.sheet=kind;sheet.innerHTML=content;sheet.classList.add('show');sheet.setAttribute('aria-hidden','false');document.getElementById('scrim').classList.add('show');app.inert=true;sheet.querySelector('button,input,textarea')?.focus()}
+function closeSheet(){sheet.classList.remove('show');sheet.setAttribute('aria-hidden','true');document.getElementById('scrim').classList.remove('show');app.inert=false;S.sheet=null;S.peer=null;lastFocus?.isConnected?lastFocus.focus():main.focus()}
+function sheetBar(name,left=''){return `<div class="sheet-bar">${left||'<span style="width:60px"></span>'}<b id="sheet-title">${esc(name)}</b><button class="link bold" data-close>Done</button></div>`}
+function markRead(peer){const ids=allMessages.filter(m=>m.peer===peer&&m.direction==='incoming').map(m=>Number(m.id));if(ids.length)S.read[peer]=Math.max(...ids);saveLocal('dji-read-v1',S.read)}
+function messageBlocks(items,ids=new Set()){let day='';return items.map(m=>{const d=date(m.timestamp),label=Number.isNaN(d.getTime())?'':d.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});const stamp=label!==day?`<div class="stamp">${esc(label)}</div>`:'';day=label;return stamp+`<div class="msg ${m.direction==='outgoing'?'outgoing':''} ${m.pending?'pending':''} ${ids.has(m.id)?'new-message-animation':''}">${esc(m.body)}<span class="msg-time">${m.pending?'Sending…':esc(time(m.timestamp))}</span></div>`}).join('')}
+function openConvo(peer){S.peer=peer;markRead(peer);render();const items=groups().find(c=>c.peer===peer)?.items||[];openSheet(sheetBar(phone(peer))+`<div class="sheet-body" id="message-stream"><div class="group">${row('Number',peer)}${row('Messages',String(items.length))}</div><div class="bubbles" id="thread-bubbles">${messageBlocks(items)}</div></div><button class="jump" id="jump-latest" hidden>Latest message</button><p class="error-inline" id="send-error" hidden></p><form class="composer" id="reply-form"><textarea name="message" rows="1" maxlength="670" placeholder="Message" aria-label="Message" required></textarea><button aria-label="Send"><svg viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 5v14"/></svg></button></form>`,'conversation');requestAnimationFrame(()=>{const s=document.getElementById('message-stream');s.scrollTop=s.scrollHeight})}
+function updateConvo(ids=new Set()){if(S.sheet!=='conversation')return;const stream=document.getElementById('message-stream'),preserveScroll=stream.scrollHeight-stream.scrollTop-stream.clientHeight>70,top=stream.scrollTop,items=groups().find(c=>c.peer===S.peer)?.items||[];document.getElementById('thread-bubbles').innerHTML=messageBlocks(items,ids);stream.querySelector('.group .row:last-child .meta').textContent=String(items.length);stream.scrollTop=preserveScroll?top:stream.scrollHeight;document.getElementById('jump-latest').hidden=!preserveScroll;markRead(S.peer);renderNav()}
+function openNew(){openSheet(sheetBar('New message','<button class="link" data-close>Cancel</button>')+`<div class="sheet-body"><form id="new-form"><div class="group">${formRow('To','number','','tel','Phone number')}<textarea name="message" class="multiline-field" maxlength="670" aria-label="Message" placeholder="Message" required></textarea></div><p class="error-inline" id="new-error" hidden></p><button class="btn" type="submit">Send message</button></form></div>`,'new')}
+function openEdit(kind){if(kind==='telegram'){openSheet(sheetBar('Telegram')+`<div class="sheet-body"><form id="telegram-form"><div class="group">${formRow('Bot token','token','','password',config.telegram_configured?'Saved — leave blank to keep':'From @BotFather')}${formRow('Chat ID','chat_id',config.chat_id,'text','Authorized chat ID')}</div><p class="sec-foot">Send your bot a message, then choose Find chat ID. Quote a forwarded SMS to send a reply from the SIM.</p><div id="telegram-result" role="status"></div><button class="btn" name="action" value="save">Save settings</button><button class="btn" name="action" value="test">Send test message</button><button class="btn" name="action" value="discover">Find chat ID</button></form></div>`,'telegram')}
+else if(kind==='access'){openSheet(sheetBar('Dashboard access')+`<div class="sheet-body"><form id="access-form"><div class="group">${formRow('Username','username',config.username)}${formRow('Password','password','','password','New password')}${formRow('Confirm','confirmation','','password','Repeat password')}</div><p class="sec-foot">Use a username of 3–32 characters and a password of at least 6 characters.</p><p class="error-inline" id="access-status" hidden></p><button class="btn">Change login</button></form></div>`,'access')}
+else{openSheet(sheetBar('Hardware')+`<div class="sheet-body"><div class="group">${row('Modem state',status.modem_state)}${row('Firmware',status.firmware,'firmware')}${row('Carrier profile',status.carrier_profile)}${row('AT interface',config.at_interface)}${row('Audio interface',config.audio_interface)}</div></div>`,'hardware')}}
+async function post(path,data){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrf,...data})});if(r.status===401){location.href='/login';throw new Error('Sign in to continue.')}const type=r.headers.get('Content-Type')||'';if(type.includes('application/json')){const x=await r.json();if(!r.ok)throw new Error(x.error||'Request failed.');return x}const doc=new DOMParser().parseFromString(await r.text(),'text/html'),notices=[...doc.querySelectorAll('.notice')];const result=notices.map(e=>e.textContent.trim()).join('\n');if(!r.ok||result.startsWith('Error:'))throw new Error(result||'Request failed.');return {text:result,notices}}
+async function send(number,body){const result=await post('/api/sms',{number,message:body});if(!allMessages.some(m=>m.id===result.message.id))allMessages.push(result.message);if(result.message.history_warning)toast(result.message.history_warning);return result.message}
+async function fetchMessages(){if(fetchingMessages)return;fetchingMessages=true;try{const r=await fetch('/messages',{cache:'no-store'});if(!r.ok)return;const next=await r.json(),old=new Set(allMessages.map(m=>m.id)),ids=new Set(next.filter(m=>!old.has(m.id)).map(m=>m.id));if(JSON.stringify(next)!==JSON.stringify(allMessages)){allMessages=next;if(S.tab==='messages')render();updateConvo(ids);if(ids.size)document.getElementById('announcer').textContent='New messages received'}}catch(_){}finally{fetchingMessages=false}}
+async function fetchStatus(){if(fetchingStatus)return;fetchingStatus=true;try{const r=await fetch('/api/status',{cache:'no-store'});if(r.ok){status=await r.json();if(S.tab!=='messages')render()}}catch(_){}finally{fetchingStatus=false}}
+document.addEventListener('input',e=>{if(e.target.id==='conversation-search'){const input=e.target,pos=input.selectionStart;S.q=input.value;render();const replacement=document.getElementById('conversation-search');replacement.focus();try{replacement.setSelectionRange(pos,pos)}catch(_){}}if(e.target.closest('#reply-form')&&e.target.tagName==='TEXTAREA'){e.target.style.height='38px';e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'}});
+document.addEventListener('scroll',e=>{if(e.target.id==='message-stream'){const s=e.target,jump=document.getElementById('jump-latest');if(jump)jump.hidden=s.scrollHeight-s.scrollTop-s.clientHeight<80}},true);
+document.addEventListener('click',async e=>{const b=e.target.closest('button,#scrim');if(!b)return;if(b.dataset.tab){S.tab=b.dataset.tab;history.replaceState(null,'',S.tab==='messages'?'#conversations':'#'+S.tab);render();main.scrollTop=0;if(S.tab==='status')fetchStatus()}
+else if(b.dataset.filter){S.filter=b.dataset.filter;render()}
+else if(b.dataset.open)openConvo(b.dataset.open);
+else if(b.id==='new-message')openNew();
+else if(b.dataset.edit)openEdit(b.dataset.edit);
+else if(b.dataset.close!==undefined||b.id==='scrim')closeSheet();
+else if(b.dataset.theme){S.theme=b.dataset.theme;saveLocal('dji-theme',S.theme);applyTheme();render()}
+else if(b.id==='refresh-status'){await fetchStatus();toast('Status updated')}
+else if(b.id==='jump-latest'){const s=document.getElementById('message-stream');s.scrollTo({top:s.scrollHeight,behavior:'smooth'});b.hidden=true}
+else if(b.hasAttribute('data-data')){b.disabled=true;try{const on=!dataOn();await post('/data',{state:on?'on':'off'});await fetchStatus();toast('Mobile data '+(on?'enabled':'disabled'))}catch(error){toast(error.message)}finally{b.disabled=false}}});
+document.addEventListener('submit',async e=>{const form=e.target;if(!['reply-form','new-form','telegram-form','access-form'].includes(form.id))return;e.preventDefault();if(S.busy)return;S.busy=true;const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{if(form.id==='reply-form'){const peer=S.peer,body=form.elements.message.value.trim();if(!body)return;const temp={id:Date.now(),timestamp:new Date().toISOString(),peer,body,direction:'outgoing',pending:true};pending.push(temp);form.elements.message.value='';updateConvo(new Set([temp.id]));try{await send(peer,body)}catch(error){form.elements.message.value=body;throw error}finally{pending=pending.filter(m=>m!==temp);updateConvo();if(S.tab==='messages')render()}}
+else if(form.id==='new-form'){const number=form.elements.number.value.trim(),body=form.elements.message.value.trim();if(!number||!body)throw new Error('Enter a number and message.');const saved=await send(number,body);S.tab='messages';render();openConvo(saved.peer)}
+else if(form.id==='telegram-form'){const token=form.elements.token.value.trim(),chat_id=form.elements.chat_id.value.trim(),action=e.submitter?.value||'save',result=await post('/telegram',{token,chat_id,action});const container=document.getElementById('telegram-result');container.replaceChildren();for(const original of result.notices){const note=document.createElement('div');note.className='notice';note.textContent=original.textContent;container.append(note)}if(action==='save'){config.telegram_configured=true;config.chat_id=chat_id;form.elements.token.value='';render();fetchStatus()}toast(action==='test'?'Test message sent':action==='save'?'Telegram settings saved':'Chat discovery complete')}
+else if(form.id==='access-form'){await post('/api/access',{username:form.elements.username.value,password:form.elements.password.value,confirmation:form.elements.confirmation.value});toast('Login changed. Sign in with your new credentials.');setTimeout(()=>location.href='/login',1200)}}catch(error){const target=document.getElementById(form.id==='reply-form'?'send-error':form.id==='new-form'?'new-error':form.id==='access-form'?'access-status':'telegram-result');if(target){target.textContent=error.message;target.hidden=false}else toast(error.message)}finally{S.busy=false;buttons.forEach(b=>b.disabled=false)}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&S.sheet)closeSheet();if(e.key==='Tab'&&S.sheet){const focus=[...sheet.querySelectorAll('button,input,textarea,select')].filter(n=>!n.disabled);if(!focus.length)return;const first=focus[0],last=focus.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='n'&&!S.sheet){e.preventDefault();openNew()}});
+render();setInterval(fetchMessages,4000);setInterval(fetchStatus,10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){fetchMessages();fetchStatus()}});
+
+const notices=document.getElementById('server-notices').content;if(notices.childNodes.length)main.prepend(notices.cloneNode(true));</script></body></html>
