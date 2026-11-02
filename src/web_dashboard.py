@@ -212,6 +212,8 @@ def _gateway_status() -> dict[str, object]:
         "phone_number": "Not provided by SIM",
         "technology": "Unavailable",
         "modem_state": "Unavailable",
+        "firmware": "Unavailable",
+        "carrier_profile": "Unavailable",
         "apn": "Automatic",
         "apn_mode": "Automatic",
         "data": "Unavailable",
@@ -231,6 +233,8 @@ def _gateway_status() -> dict[str, object]:
             failure = useful(generic.get("state-failed-reason"))
             sim_path = useful(generic.get("sim"))
             status["modem_state"] = failure.replace("-", " ").title() if state == "failed" and failure else state.replace("-", " ").title()
+            status["firmware"] = useful(generic.get("revision")) or "Unavailable"
+            status["carrier_profile"] = useful(generic.get("carrier-configuration")) or "Unavailable"
             status["sim_present"] = bool(sim_path)
             unlock = useful(generic.get("unlock-required"))
             status["sim_status"] = "No SIM" if not sim_path else ("PIN required" if unlock not in ("", "none", "sim-pin2") else "Ready")

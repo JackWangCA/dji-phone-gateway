@@ -102,8 +102,13 @@ class ConversationTests(unittest.TestCase):
         self.assertIn('data-view="status"', document)
         self.assertIn('data-view="settings"', document)
         self.assertIn('id="new-message"', document)
+        self.assertIn('id="conversation-search"', document)
+        self.assertIn('id="thread-back"', document)
+        self.assertIn('id="jump-latest"', document)
         self.assertIn('id="signal-value"', document)
         self.assertIn('id="phone-number"', document)
+        self.assertIn('id="firmware"', document)
+        self.assertIn('id="carrier-profile"', document)
         self.assertIn('id="access-form"', document)
         self.assertIn("/api/sms", document)
         self.assertIn("/api/status", document)
@@ -126,6 +131,8 @@ class ConversationTests(unittest.TestCase):
                     "signal-quality": {"value": "73", "recent": "yes"},
                     "access-technologies": ["lte"],
                     "own-numbers": ["+15551234567"],
+                    "revision": "QDC507GLEFM21",
+                    "carrier-configuration": "Commercial-TMO_VoLTE",
                 },
                 "3gpp": {
                     "registration-state": "home",
@@ -163,6 +170,8 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(status["carrier"], "China Telecom")
         self.assertEqual(status["phone_number"], "+15551234567")
         self.assertEqual(status["technology"], "LTE")
+        self.assertEqual(status["firmware"], "QDC507GLEFM21")
+        self.assertEqual(status["carrier_profile"], "Commercial-TMO_VoLTE")
         self.assertEqual(status["apn"], "CTNET")
         self.assertEqual(status["apn_mode"], "Automatic")
 
