@@ -140,6 +140,29 @@ class ConversationTests(unittest.TestCase):
             if authenticated:
                 self.assertEqual(handler.respond_json.call_args.args[1], 403)
 
+    def test_push_assets_are_available_without_dashboard_login(self):
+        for path, filename in (("/sw.js", "sw.js"), ("/manifest.webmanifest", "manifest.webmanifest")):
+            handler = mock.Mock()
+            handler.path = path
+            dashboard.Handler.do_GET(handler)
+            self.assertEqual(handler.respond_asset.call_args.args[0], filename)
+            handler.authenticate.assert_not_called()
+
+    def test_telegram_switch_saves_preference_without_erasing_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = pathlib.Path(directory) / "settings.json"
+            settings.write_text('{"telegram_bot_token":"saved","telegram_chat_id":42}')
+            handler = mock.Mock()
+            handler.path = "/api/notifications"
+            handler.form.return_value = {"csrf": dashboard.CSRF_TOKEN, "telegram": "off"}
+            handler.authenticate.return_value = True
+            with mock.patch.object(dashboard, "SETTINGS_PATH", settings):
+                dashboard.Handler.do_POST(handler)
+                value = dashboard.load_settings()
+            self.assertFalse(value["telegram_enabled"])
+            self.assertEqual(value["telegram_bot_token"], "saved")
+            self.assertEqual(value["telegram_chat_id"], 42)
+
     def test_page_contains_separate_conversation_view(self):
         with (
             mock.patch.object(dashboard, "run", return_value=(0, "off")),

@@ -113,6 +113,14 @@ sudo /opt/dji-phone-gateway/src/carrier_profile.py --status
 sudo /opt/dji-phone-gateway/src/carrier_profile.py --dry-run --force
 ```
 
+## iPhone notifications
+
+Open the gateway's HTTPS address and add it to your iPhone Home Screen. Open the Home Screen app and use **Settings → Notifications → Push notifications** to allow notifications on that device, then use **Send test notification**. iOS 16.4 or later is required. A regular Safari bookmark and a plain HTTP LAN address cannot receive iPhone Web Push.
+
+The independent **Telegram** switch controls gateway-wide Telegram forwarding. You can use Telegram, Web Push, or both. Turning either off does not stop SMS storage. Push subscriptions apply per device and survive service restarts; enablement starts with new incoming messages, not the existing history. Tapping a notification opens its conversation. The Pi sends encrypted Web Push directly to the browser's push provider; no Apple Developer account is needed.
+
+Push credentials and per-device delivery cursors are stored in `/var/lib/dji-phone-gateway/push.sqlite3` and `push-vapid.pem`. Keep these files across upgrades. Set `PUSH_VAPID_SUBJECT` to your contact URL or `mailto:` address if desired. The installer creates the Python virtual environment and installs `requirements-push.txt`.
+
 ## Security
 
 - Keep SIP on Wi-Fi/VPN; the generated PJSIP ACL accepts RFC1918/ULA addresses only.

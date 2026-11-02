@@ -29,6 +29,7 @@ from pathlib import Path
 
 from dashboard_ui import DASHBOARD_HTML as REDESIGNED_HTML, LOGIN_HTML as REDESIGNED_LOGIN_HTML
 from sms_bridge import Config, Telegram, ami_command, safe_phone, safe_sms
+import web_push
 
 HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
 PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
@@ -502,6 +503,7 @@ def page(message: str = "", discovered: list[dict] | None = None) -> str:
         "@@STATUS_JSON@@": json.dumps(gateway_status()).replace("</", "<\\/"),
         "@@CONFIG_JSON@@": json.dumps({
             "telegram_configured": token_set,
+            "telegram_enabled": settings.get("telegram_enabled", True),
             "chat_id": str(chat_id),
             "username": dashboard_username(settings),
             "at_interface": "Connected" if modem_present else "Missing",
@@ -527,7 +529,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
-        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("Cache-Control", "no-cache" if filename in ("sw.js", "manifest.webmanifest") else "public, max-age=86400")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -570,7 +572,7 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def respond(self, content: str, status: int = 200) -> None:
-        body = content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+        body = content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; worker-src 'self'; manifest-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
     def respond_json(self, value: object, status: int = 200) -> None:
         body = json.dumps(value).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
@@ -586,6 +588,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/apple-touch-icon.png":
             self.respond_asset("apple-touch-icon.png", "image/png")
             return
+        if path == "/sw.js":
+            self.respond_asset("sw.js", "application/javascript; charset=utf-8")
+            return
+        if path == "/manifest.webmanifest":
+            self.respond_asset("manifest.webmanifest", "application/manifest+json")
+            return
         if path == "/login":
             if self.authorized():
                 self.redirect("/")
@@ -597,6 +605,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/": self.respond(page())
         elif path == "/messages": self.respond_json(messages())
         elif path == "/api/status": self.respond_json(gateway_status())
+        elif path == "/api/push":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            device_id = query.get("device_id", [""])[-1]
+            try:
+                self.respond_json({"public_key": web_push.public_key(), **web_push.device_state(device_id)})
+            except (OSError, ImportError, ValueError):
+                self.respond_json({"error": "Push service is unavailable. Check the gateway installation."}, 503)
         else: self.send_error(404)
 
     def do_POST(self) -> None:
@@ -665,6 +680,29 @@ class Handler(BaseHTTPRequestHandler):
                 saved = send_sms(form.get("number", ""), form.get("message", ""))
                 if is_api: self.respond_json({"message": saved})
                 else: self.respond(page("SMS queued."))
+            elif path == "/api/notifications":
+                state = form.get("telegram")
+                if state not in ("on", "off"):
+                    raise ValueError("Choose whether Telegram forwarding is on or off.")
+                update_settings({"telegram_enabled": state == "on"})
+                self.respond_json({"telegram_enabled": state == "on"})
+            elif path == "/api/push/subscribe":
+                try:
+                    subscription = json.loads(form.get("subscription", ""))
+                except json.JSONDecodeError as exc:
+                    raise ValueError("Invalid push subscription.") from exc
+                self.respond_json({"device_id": web_push.subscribe(subscription), "enabled": True})
+            elif path == "/api/push/unsubscribe":
+                web_push.disable(form.get("device_id", ""))
+                self.respond_json({"enabled": False})
+            elif path == "/api/push/test":
+                try:
+                    web_push.test_notification(form.get("device_id", ""))
+                except ValueError:
+                    raise
+                except Exception as exc:
+                    raise RuntimeError("Push delivery failed. Enable notifications again and retry.") from exc
+                self.respond_json({"ok": True})
             elif path == "/api/messages/delete":
                 deleted = delete_messages(form.get("ids", ""), form.get("peer", ""), form.get("before_id", ""))
                 self.respond_json({"deleted": deleted, "messages": messages()})
@@ -683,4 +721,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     saved_password = str(load_settings().get("dashboard_password_hash") or "")
     if (not PASSWORD or PASSWORD == "CHANGE_ME") and not saved_password: raise SystemExit("DASHBOARD_PASSWORD is not configured")
+    web_push.start_worker()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

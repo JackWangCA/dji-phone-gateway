@@ -7,6 +7,8 @@ import tempfile
 import unittest
 import importlib.machinery
 import importlib.util
+import io
+from unittest import mock
 
 
 SCRIPT = pathlib.Path(__file__).parents[1] / "bin" / "telegram-notify"
@@ -17,6 +19,26 @@ LOADER.exec_module(notify)
 
 
 class IncomingSmsTests(unittest.TestCase):
+    def test_telegram_can_be_disabled_without_stopping_sms_storage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = pathlib.Path(directory) / "messages.sqlite3"
+            settings = pathlib.Path(directory) / "settings.json"
+            settings.write_text(json.dumps({"telegram_bot_token": "saved-token", "telegram_chat_id": 42,
+                                            "telegram_enabled": False}))
+            with (
+                mock.patch.dict(os.environ, {"SMS_DATABASE": str(database), "GATEWAY_SETTINGS": str(settings)}),
+                mock.patch.object(notify.sys, "stdin", io.StringIO("\n")),
+                mock.patch.object(notify, "agi_variable", side_effect=["+15551234567", "", "Hello"]),
+                mock.patch.object(notify, "agi_verbose"),
+                mock.patch.object(notify.urllib.request, "urlopen") as request,
+                self.assertRaises(SystemExit) as exit_result,
+            ):
+                notify.main()
+            self.assertEqual(exit_result.exception.code, 0)
+            request.assert_not_called()
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute("SELECT body FROM messages").fetchone()[0], "Hello")
+
     def test_telegram_message_id_is_linked_to_sender(self):
         with tempfile.TemporaryDirectory() as directory:
             database = pathlib.Path(directory) / "messages.sqlite3"

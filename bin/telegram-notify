@@ -89,6 +89,9 @@ def main():
             settings = json.load(stream)
         token = str(settings.get("telegram_bot_token") or token)
         chat = str(settings.get("telegram_chat_id") or chat)
+        if settings.get("telegram_enabled", True) is False:
+            token = ""
+            chat = ""
     except (FileNotFoundError, OSError, json.JSONDecodeError):
         pass
 
@@ -114,7 +117,7 @@ def main():
         raise SystemExit(1)
 
     if not token or not chat:
-        agi_verbose("DJI gateway: Telegram is not configured; SMS stored locally")
+        agi_verbose("DJI gateway: Telegram is off or not configured; SMS stored locally")
         raise SystemExit(0)
     payload = urllib.parse.urlencode({"chat_id": chat, "text": telegram_notification(sender, message)}).encode()
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)

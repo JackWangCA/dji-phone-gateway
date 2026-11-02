@@ -16,7 +16,7 @@ echo "Installing OS packages..."
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential cmake git libasound2-dev libsqlite3-dev libjansson-dev \
-    pkg-config python3 curl usbutils nftables network-manager modemmanager mobile-broadband-provider-info libqmi-utils sudo wget patch \
+    pkg-config python3 python3-venv python3-cryptography curl usbutils nftables network-manager modemmanager mobile-broadband-provider-info libqmi-utils sudo wget patch \
     libssl-dev libncurses-dev libnewt-dev libxml2-dev uuid-dev libedit-dev \
     libsrtp2-dev libspandsp-dev libcurl4-openssl-dev libcap-dev python3-dev
 
@@ -102,6 +102,11 @@ install -m 0755 "$src_dir/bin/dji-data" "$install_root/bin/dji-data"
 install -m 0755 "$src_dir/bin/dji-gateway-diag" "$install_root/bin/dji-gateway-diag"
 install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"
 install -m 0755 "$src_dir/src/web_dashboard.py" "$install_root/src/web_dashboard.py"
+install -m 0644 "$src_dir/src/web_push.py" "$install_root/src/web_push.py"
+install -m 0644 "$src_dir/src/sw.js" "$install_root/src/sw.js"
+install -m 0644 "$src_dir/src/manifest.webmanifest" "$install_root/src/manifest.webmanifest"
+python3 -m venv --system-site-packages "$install_root/venv"
+"$install_root/venv/bin/pip" install -r "$src_dir/requirements-push.txt"
 install -m 0755 "$src_dir/src/carrier_profile.py" "$install_root/src/carrier_profile.py"
 install -m 0644 "$src_dir/src/dashboard_ui.py" "$install_root/src/dashboard_ui.py"
 install -m 0644 "$src_dir/src/dashboard.html" "$install_root/src/dashboard.html"
