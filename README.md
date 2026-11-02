@@ -115,7 +115,7 @@ sudo /opt/dji-phone-gateway/src/carrier_profile.py --dry-run --force
 
 ## iPhone notifications
 
-Open the gateway's HTTPS address and add it to your iPhone Home Screen. Open the Home Screen app and use **Settings → Notifications → Push notifications** to allow notifications on that device, then use **Send test notification**. iOS 16.4 or later is required. A regular Safari bookmark and a plain HTTP LAN address cannot receive iPhone Web Push.
+Open the gateway's HTTPS address and add it to your iPhone Home Screen. Open the Home Screen app and use **Forwarding → Destinations → Push notifications** to allow notifications on that device, then use **Send test notification**. Telegram's switch, setup, and test message are also under **Forwarding**. iOS 16.4 or later is required. A regular Safari bookmark and a plain HTTP LAN address cannot receive iPhone Web Push.
 
 The independent **Telegram** switch controls gateway-wide Telegram forwarding. You can use Telegram, Web Push, or both. Turning either off does not stop SMS storage. Push subscriptions apply per device and survive service restarts; enablement starts with new incoming messages, not the existing history. Tapping a notification opens its conversation. The Pi sends encrypted Web Push directly to the browser's push provider; no Apple Developer account is needed.
 

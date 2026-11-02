@@ -131,7 +131,7 @@ def test_notification(device_id: str) -> None:
     if not row:
         raise ValueError("Enable notifications on this device first.")
     deliver(json.loads(row[0]), {"title": "SMS Forwarder", "body": "Notifications are working on this device.",
-                              "tag": "push-test", "url": "/#settings"})
+                              "tag": "push-test", "url": "/#forwarding"})
 
 
 def process_once() -> None:
