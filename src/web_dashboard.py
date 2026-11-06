@@ -204,6 +204,22 @@ def _json_command(command: list[str], timeout: int = 8) -> dict:
         return {}
 
 
+def asterisk_sim_number(sim_identifier: str) -> str:
+    """Read Asterisk's SIM own-number cache only when it matches the active SIM."""
+    if not sim_identifier:
+        return ""
+    try:
+        cfg = bridge_config()
+        output = ami_command(cfg, f"quectel show device state {cfg.modem}")
+    except (OSError, RuntimeError, ValueError, KeyError):
+        return ""
+    fields = dict(re.findall(r"^(?:Output:\s*)?\s*([^:\r\n]+?)\s*:\s*([^\r\n]*)", output, re.MULTILINE))
+    if fields.get("ICCID", "").strip() != sim_identifier:
+        return ""
+    number = fields.get("Subscriber Number", "").strip()
+    return number if re.fullmatch(r"\+?[0-9]{3,15}", number) else ""
+
+
 def _gateway_status() -> dict[str, object]:
     status: dict[str, object] = {
         "modem_present": False,
@@ -215,6 +231,7 @@ def _gateway_status() -> dict[str, object]:
         "carrier": "Unavailable",
         "operator_code": "",
         "phone_number": "Not provided by SIM",
+        "phone_number_source": "",
         "technology": "Unavailable",
         "modem_state": "Unavailable",
         "firmware": "Unavailable",
@@ -264,12 +281,18 @@ def _gateway_status() -> dict[str, object]:
                 number = next((useful(item) for item in own_numbers if useful(item)), "")
                 if number:
                     status["phone_number"] = number
+                    status["phone_number_source"] = "ModemManager"
             sim_operator_name = ""
             sim_operator_code = ""
             if sim_path:
                 sim_index = sim_path.rsplit("/", 1)[-1]
                 sim = _json_command(["mmcli", "-i", sim_index, "-J"], 5).get("sim", {})
                 properties = sim.get("properties", {}) if isinstance(sim, dict) and isinstance(sim.get("properties"), dict) else {}
+                if not status["phone_number_source"]:
+                    number = asterisk_sim_number(useful(properties.get("iccid")))
+                    if number:
+                        status["phone_number"] = number
+                        status["phone_number_source"] = "SIM via Asterisk"
                 sim_operator_name = useful(properties.get("operator-name"))
                 sim_operator_code = useful(properties.get("operator-code"))
                 if sim_operator_code:

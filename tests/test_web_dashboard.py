@@ -264,6 +264,35 @@ class ConversationTests(unittest.TestCase):
         self.assertTrue((dashboard.ASSET_DIR / "dji-phone-gateway-icon.svg").is_file())
         self.assertTrue((dashboard.ASSET_DIR / "apple-touch-icon.png").is_file())
 
+    def test_sim_number_fallback_parses_ami_and_requires_matching_sim(self):
+        output = ("Response: Follows\r\nOutput:   ICCID                   : 89860000000000000001\r\n"
+                  "Output:   Subscriber Number       : +8613300000000\r\nOutput: --END COMMAND--\r\n")
+        with mock.patch.object(dashboard, "bridge_config", return_value=mock.Mock(modem="quectel0")), \
+                mock.patch.object(dashboard, "ami_command", return_value=output) as ami:
+            self.assertEqual(dashboard.asterisk_sim_number("89860000000000000001"), "+8613300000000")
+            self.assertEqual(dashboard.asterisk_sim_number("89860000000000000002"), "")
+            self.assertEqual(dashboard.asterisk_sim_number(""), "")
+            self.assertEqual(ami.call_count, 2)
+            ami.return_value = output.replace("+8613300000000", "Unknown")
+            self.assertEqual(dashboard.asterisk_sim_number("89860000000000000001"), "")
+            ami.side_effect = OSError("Asterisk unavailable")
+            self.assertEqual(dashboard.asterisk_sim_number("89860000000000000001"), "")
+
+    def test_status_uses_asterisk_number_when_modemmanager_returns_empty(self):
+        def json_command(command, _timeout=8):
+            if "-L" in command:
+                return {"modem-list": ["/modem/0"]}
+            if "-m" in command:
+                return {"modem": {"generic": {"sim": "/sim/0", "own-numbers": [""]}}}
+            return {"sim": {"properties": {"iccid": "89860000000000000001"}}}
+        with mock.patch.object(dashboard, "_json_command", side_effect=json_command), \
+                mock.patch.object(dashboard, "run", return_value=(0, "active")), \
+                mock.patch.object(dashboard, "asterisk_sim_number", return_value="+8613300000000") as fallback:
+            status = dashboard._gateway_status()
+        fallback.assert_called_once_with("89860000000000000001")
+        self.assertEqual(status["phone_number"], "+8613300000000")
+        self.assertEqual(status["phone_number_source"], "SIM via Asterisk")
+
 
 if __name__ == "__main__":
     unittest.main()
