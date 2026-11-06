@@ -59,6 +59,33 @@ class RoutingTests(unittest.TestCase):
             dashboard.Handler.do_POST(handler)
         handler.redirect.assert_not_called()
 
+    def test_logout_api_clears_cookie_without_following_cloudflare_redirect(self):
+        for host, destination in (("sms.example.com", "/cdn-cgi/access/logout"), ("smspi.local", "/login")):
+            handler = mock.Mock()
+            handler.path = "/api/logout"
+            handler.headers = {"Host": host}
+            handler.form.return_value = {"csrf": dashboard.CSRF_TOKEN}
+            with mock.patch.dict(os.environ, CONFIG):
+                dashboard.Handler.do_POST(handler)
+            self.assertEqual(handler.respond_json.call_args.args[0], {"redirect": destination})
+            self.assertIn("Max-Age=0", handler.respond_json.call_args.kwargs["cookie"])
+            handler.redirect.assert_not_called()
+
+    def test_logout_api_requires_authentication_and_csrf(self):
+        for authenticated, csrf in ((False, dashboard.CSRF_TOKEN), (True, "wrong")):
+            handler = mock.Mock()
+            handler.path = "/api/logout"
+            handler.headers = {"Host": "sms.example.com"}
+            handler.authenticate.return_value = authenticated
+            handler.form.return_value = {"csrf": csrf}
+            dashboard.Handler.do_POST(handler)
+            if authenticated:
+                self.assertEqual(handler.respond_json.call_args.args[1], 403)
+                self.assertNotIn("cookie", handler.respond_json.call_args.kwargs)
+            else:
+                handler.respond_json.assert_not_called()
+            handler.redirect.assert_not_called()
+
 
 @unittest.skipUnless(importlib.util.find_spec("jwt") and importlib.util.find_spec("cryptography"),
                      "Requires PyJWT and cryptography")

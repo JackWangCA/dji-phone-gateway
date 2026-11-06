@@ -581,8 +581,17 @@ class Handler(BaseHTTPRequestHandler):
     def respond(self, content: str, status: int = 200) -> None:
         body = content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; worker-src 'self'; manifest-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; base-uri 'none'"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
-    def respond_json(self, value: object, status: int = 200) -> None:
-        body = json.dumps(value).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Cache-Control", "no-store"); self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def respond_json(self, value: object, status: int = 200, cookie: str | None = None) -> None:
+        body = json.dumps(value).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def form(self) -> dict[str, str]:
         length = min(int(self.headers.get("Content-Length", "0")), 16384); values = urllib.parse.parse_qs(self.rfile.read(length).decode(errors="replace"), keep_blank_values=True); return {key: items[-1] for key, items in values.items()}
@@ -655,14 +664,23 @@ class Handler(BaseHTTPRequestHandler):
             self.redirect(next_path, cookie)
             return
         if not self.authenticate(): return
-        if path == "/logout":
+        if path in ("/logout", "/api/logout"):
             if not secrets.compare_digest(form.get("csrf", ""), CSRF_TOKEN):
-                self.respond(page("Request expired; reload the dashboard."), 403)
+                if path == "/api/logout":
+                    self.respond_json({"error": "Request expired; reload the dashboard."}, 403)
+                else:
+                    self.respond(page("Request expired; reload the dashboard."), 403)
                 return
             cookie = f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
             if self.request_is_secure():
                 cookie += "; Secure"
-            self.redirect("/cdn-cgi/access/logout" if cloudflare_access.required(self.headers) else "/login", cookie)
+            destination = "/cdn-cgi/access/logout" if cloudflare_access.required(self.headers) else "/login"
+            if path == "/api/logout":
+                # Let JavaScript start a fresh top-level navigation. A form POST's
+                # redirect chain can be blocked when Access crosses origins.
+                self.respond_json({"redirect": destination}, cookie=cookie)
+            else:
+                self.redirect(destination, cookie)
             return
         is_api = path.startswith("/api/")
         if not secrets.compare_digest(form.get("csrf", ""), CSRF_TOKEN):
