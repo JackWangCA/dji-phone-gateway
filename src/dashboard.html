@@ -2,18 +2,18 @@
 :root{
   --bg:#f2f2f7;--card:#fff;--label:#000;--label2:rgba(60,60,67,.6);--label3:rgba(60,60,67,.3);
   --sep:rgba(60,60,67,.18);--fill:rgba(120,120,128,.12);--blue:#007aff;--green:#34c759;--red:#ff3b30;--orange:#ff9500;
-  --glass:rgba(249,249,249,.78);--bubble:#e9e9eb;
+  --glass:rgba(249,249,249,.78);--bubble:#e9e9eb;--seg-bg:#e3e3e8;--seg-selected:#fff;
   box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#000;--card:#1c1c1e;--label:#fff;--label2:rgba(235,235,245,.6);--label3:rgba(235,235,245,.3);
   --sep:rgba(84,84,88,.6);--fill:rgba(120,120,128,.24);--blue:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;
-  --glass:rgba(30,30,30,.78);--bubble:#26262a;color-scheme:dark}}
+  --glass:rgba(30,30,30,.78);--bubble:#26262a;--seg-bg:#1c1c1e;--seg-selected:#636366;color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#000;--card:#1c1c1e;--label:#fff;--label2:rgba(235,235,245,.6);--label3:rgba(235,235,245,.3);
   --sep:rgba(84,84,88,.6);--fill:rgba(120,120,128,.24);--blue:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;
-  --glass:rgba(30,30,30,.78);--bubble:#26262a;color-scheme:dark}
+  --glass:rgba(30,30,30,.78);--bubble:#26262a;--seg-bg:#1c1c1e;--seg-selected:#636366;color-scheme:dark}
 *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{background:var(--bg);color:var(--label);font:17px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
@@ -65,9 +65,9 @@ button.row:active{background:var(--fill)}
 .sw[aria-checked=true]::after{transform:translateX(20px)}
 
 /* segmented */
-.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin-bottom:16px}
-.seg button{flex:1;padding:6px 8px;border-radius:7px;font-size:13px;font-weight:500}
-.seg button[aria-pressed=true]{background:var(--card);box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04);font-weight:600}
+.seg{display:flex;background:var(--seg-bg);border-radius:9px;padding:2px;margin-bottom:16px}
+.seg button{flex:1;padding:6px 8px;border-radius:7px;font-size:13px;font-weight:500;color:var(--label);-webkit-text-fill-color:var(--label)}
+.seg button[aria-pressed=true]{background:var(--seg-selected);box-shadow:0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04);font-weight:600}
 
 /* status */
 .hero{background:var(--card);border-radius:12px;padding:20px 16px;display:flex;align-items:center;gap:16px;margin-bottom:8px}
