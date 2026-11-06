@@ -31,6 +31,7 @@ from dashboard_ui import DASHBOARD_HTML as REDESIGNED_HTML, LOGIN_HTML as REDESI
 from sms_bridge import Config, Telegram, ami_command, safe_phone, safe_sms
 import web_push
 import modem_sms
+import cloudflare_access
 
 HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
 PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
@@ -537,6 +538,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def authorized(self) -> bool:
+        if cloudflare_access.required(self.headers):
+            return cloudflare_access.identity(self.headers) is not None
         try:
             cookies = SimpleCookie()
             cookies.load(self.headers.get("Cookie", ""))
@@ -568,6 +571,9 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if self.path.startswith("/api/") or urllib.parse.urlsplit(self.path).path == "/messages":
             self.respond_json({"error": "Sign in to continue."}, HTTPStatus.UNAUTHORIZED)
+        elif cloudflare_access.required(self.headers):
+            self.respond('<p>Cloudflare sign-in could not be verified. '
+                         '<a href="/cdn-cgi/access/logout">Sign out and sign in again</a>.</p>', 403)
         else:
             self.redirect("/login?next=" + urllib.parse.quote(self.path, safe=""))
         return False
@@ -602,6 +608,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.authorized():
                 self.redirect("/")
                 return
+            if cloudflare_access.required(self.headers):
+                self.authenticate()
+                return
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             self.respond(login_page(next_path=query.get("next", ["/"])[-1]))
             return
@@ -622,6 +631,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlsplit(self.path).path
         form = self.form()
         if path == "/login":
+            if cloudflare_access.required(self.headers):
+                if self.authenticate():
+                    self.redirect("/")
+                return
             if not secrets.compare_digest(form.get("csrf", ""), CSRF_TOKEN):
                 self.respond(login_page("This sign-in page expired. Reload it and try again.", form.get("next", "/")), 403)
                 return
@@ -649,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
             cookie = f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
             if self.request_is_secure():
                 cookie += "; Secure"
-            self.redirect("/login", cookie)
+            self.redirect("/cdn-cgi/access/logout" if cloudflare_access.required(self.headers) else "/login", cookie)
             return
         is_api = path.startswith("/api/")
         if not secrets.compare_digest(form.get("csrf", ""), CSRF_TOKEN):
@@ -723,6 +736,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    cloudflare_access.configuration()
     saved_password = str(load_settings().get("dashboard_password_hash") or "")
     if (not PASSWORD or PASSWORD == "CHANGE_ME") and not saved_password: raise SystemExit("DASHBOARD_PASSWORD is not configured")
     web_push.start_worker()

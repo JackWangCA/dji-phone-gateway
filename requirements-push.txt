@@ -1,1 +1,2 @@
 pywebpush==2.5.0
+PyJWT[crypto]==2.10.1

@@ -13,6 +13,31 @@ Turn a first-generation DJI 4G dongle (Quectel EG25-G) into a private cellular-t
 
 Telegram bots cannot originate or receive Telegram voice calls and cannot invoke iOS CallKit. Telegram is therefore used only for SMS and controls; SIP supplies the native-call UI.
 
+## Cloudflare Access single sign-in
+
+The dashboard can accept a verified Cloudflare Access login on its public hostname,
+while retaining its password login on local addresses. In Cloudflare Zero Trust,
+create a self-hosted Access application covering the entire dashboard hostname
+(including API paths) and an Allow policy limited to your account. Keep the tunnel
+route pointed at `http://localhost:8080`.
+
+Add these three values to `/etc/dji-phone-gateway/gateway.env`:
+
+```sh
+CLOUDFLARE_ACCESS_ISSUER=https://YOUR-TEAM.cloudflareaccess.com
+CLOUDFLARE_ACCESS_AUD=YOUR_APPLICATION_AUDIENCE_TAG
+CLOUDFLARE_ACCESS_HOSTNAME=messages.example.com
+```
+
+Find the team domain in Zero Trust settings and the Application Audience (AUD) tag
+in the Access application's settings. Install the current requirements with the
+gateway venv, then restart `dji-dashboard.service`. The server verifies RS256
+signatures, issuer, audience, expiry, and user identity against your team's public
+keys. A local password cookie cannot bypass Access on the configured public host.
+Sign out through the public hostname to end the Cloudflare Access session.
+Do not expose port 8080 directly to the Internet. Cloudflare policies and session
+duration remain managed in Cloudflare; the app does not extend an Access session.
+
 ## Hardware and network requirements
 
 - Raspberry Pi 3B running 64-bit Raspberry Pi OS Lite. Trixie is supported; the installer builds Asterisk 20 LTS when the OS repository does not provide Asterisk.
