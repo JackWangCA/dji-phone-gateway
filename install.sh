@@ -110,6 +110,9 @@ install -m 0644 "$src_dir/src/manifest.webmanifest" "$install_root/src/manifest.
 python3 -m venv --system-site-packages "$install_root/venv"
 "$install_root/venv/bin/pip" install -r "$src_dir/requirements-push.txt"
 install -m 0755 "$src_dir/src/carrier_profile.py" "$install_root/src/carrier_profile.py"
+for asset in android_carrier.py carrier-data.json carrier-data-LICENSE carrier-data-NOTICE; do
+    install -m 0644 "$src_dir/src/$asset" "$install_root/src/$asset"
+done
 install -m 0644 "$src_dir/src/dashboard_ui.py" "$install_root/src/dashboard_ui.py"
 install -m 0644 "$src_dir/src/dashboard.html" "$install_root/src/dashboard.html"
 install -m 0644 "$src_dir/src/dji-phone-gateway-icon.svg" "$install_root/src/dji-phone-gateway-icon.svg"

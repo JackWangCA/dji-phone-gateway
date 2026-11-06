@@ -31,6 +31,7 @@ class DataProfileTests(unittest.TestCase):
                 "PATH": f"{root}:{os.environ['PATH']}",
                 "NMCLI_LOG": str(log),
                 "CELLULAR_APN": apn,
+                "CARRIER_PROFILE_COMMAND": str(root / "uninstalled-profile.py"),
                 "WWAN_INTERFACE": "lo",
                 "SYS_CLASS_NET": str(root / "sys"),
             }

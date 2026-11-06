@@ -38,6 +38,42 @@ Sign out through the public hostname to end the Cloudflare Access session.
 Do not expose port 8080 directly to the Internet. Cloudflare policies and session
 duration remain managed in Cloudflare; the app does not extend an Access session.
 
+## Automatic SIM and carrier settings
+
+The Pi bundles Android's Apache-2.0 carrier identification and Internet APN tables
+for offline use. It matches the SIM's home MCC/MNC, IMSI patterns, ICCID prefixes,
+SPN, and GID1/GID2 when exposed by ModemManager. Missing identifiers do not satisfy
+MVNO rules. Unsupported carrier privilege rules/PNN are not guessed. This is an
+AOSP database snapshot, not Google's proprietary Pixel settings or firmware.
+
+The profile monitor detects SIM changes, retains a registered profile, and learns
+profiles by SIM and visited network. If registration fails after the grace period,
+recovery prioritizes the learned network pairing, then the learned SIM profile,
+identified-carrier profiles, home/visited PLMN mappings, and the generic profile.
+Only profiles already installed in the dongle are candidates. Failed recovery
+restores the previous profile where possible and observes a cooldown. No profile
+files are downloaded or flashed. Registration is recorded separately from
+unverified SMS/IMS readiness; the system does not send chargeable test messages.
+
+On an explicit **data on** request, the gateway selects an unambiguous supported
+Android Internet APN for the current SIM. IMS/MMS-only APNs are excluded. Multiple
+matches or unsupported settings fall back to NetworkManager's provider database.
+Explicit `CELLULAR_APN` and existing manual NetworkManager APNs take precedence.
+Updating the carrier database or running the profile monitor does not enable data
+or change a working APN. A previously managed Android APN is replaced on the next
+data-on request if the SIM changes.
+
+The Status tab's SIM home operator uses the detected Android carrier identity.
+The visited carrier remains separate, so a China Telecom SIM roaming on T-Mobile
+is identified as China Telecom. State and source-version information are available
+with `sudo /opt/dji-phone-gateway/src/carrier_profile.py --status`.
+
+`src/carrier-data.json` records exact upstream commits and source SHA-256 digests.
+To rebuild it, run `python3 scripts/update-carrier-data.py`; to update it, supply
+reviewed exact commits with `--carrier-revision` and `--apn-revision`, then deploy
+the resulting database with the app. Attribution and license are in
+`src/carrier-data-NOTICE` and `src/carrier-data-LICENSE`.
+
 ## Hardware and network requirements
 
 - Raspberry Pi 3B running 64-bit Raspberry Pi OS Lite. Trixie is supported; the installer builds Asterisk 20 LTS when the OS repository does not provide Asterisk.

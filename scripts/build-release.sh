@@ -20,7 +20,7 @@ trap 'rm -rf "$stage_root"' EXIT INT TERM
 package_dir="$stage_root/dji-phone-gateway-$version"
 mkdir -p "$package_dir"
 
-for path in VERSION README.md install.sh requirements-push.txt asterisk bin config patches src systemd udev; do
+for path in VERSION README.md install.sh requirements-push.txt asterisk bin config patches scripts src systemd udev; do
     cp -R "$src_dir/$path" "$package_dir/$path"
 done
 

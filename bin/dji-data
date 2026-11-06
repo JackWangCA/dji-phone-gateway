@@ -27,7 +27,12 @@ configure_connection() {
     if [ -n "$apn" ]; then
         nmcli connection modify "$connection" gsm.auto-config no gsm.apn "$apn"
     else
-        nmcli connection modify "$connection" gsm.apn '' gsm.auto-config yes
+        profile_command=${CARRIER_PROFILE_COMMAND:-/opt/dji-phone-gateway/src/carrier_profile.py}
+        if [ -f "$profile_command" ]; then
+            python3 "$profile_command" --configure-apn
+        else
+            nmcli connection modify "$connection" gsm.apn '' gsm.auto-config yes
+        fi
     fi
 }
 

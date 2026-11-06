@@ -1,0 +1,14 @@
+Android carrier identification and APN data
+Copyright The Android Open Source Project
+Licensed under the Apache License, Version 2.0 (see carrier-data-LICENSE).
+
+carrier-data.json is derived from:
+https://android.googlesource.com/platform/packages/providers/TelephonyProvider/
+https://android.googlesource.com/device/sample/
+
+android_carrier.py adapts matching semantics and priority weights from:
+https://android.googlesource.com/platform/frameworks/opt/telephony/+/refs/heads/main/src/java/com/android/internal/telephony/CarrierResolver.java
+
+The database contains source revisions and SHA-256 digests. It is an offline
+snapshot, not Google's proprietary Pixel carrier settings or a live update service.
+Update with scripts/update-carrier-data.py using exact upstream Git revisions.

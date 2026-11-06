@@ -15,6 +15,8 @@ import termios
 import time
 from pathlib import Path
 
+import android_carrier
+
 STATE_PATH = Path(os.getenv("CARRIER_PROFILE_STATE", "/var/lib/dji-phone-gateway/carrier-profile.json"))
 LOCK_PATH = Path(os.getenv("CARRIER_PROFILE_LOCK", "/run/lock/dji-carrier-profile.lock"))
 GRACE_SECONDS = int(os.getenv("CARRIER_PROFILE_GRACE", "120"))
@@ -170,12 +172,96 @@ def modem_snapshot() -> dict[str, object]:
         "iccid": clean(sim_properties.get("iccid")),
         "imsi": clean(sim_properties.get("imsi")),
         "home_plmn": clean(sim_properties.get("operator-code")),
+        "spn": clean(sim_properties.get("operator-name")),
+        "gid1": clean(sim_properties.get("gid1")).replace(":", ""),
+        "gid2": clean(sim_properties.get("gid2")).replace(":", ""),
+        "unlock_required": clean(generic.get("unlock-required")),
     }
 
 
 def clean(value: object) -> str:
     text = str(value or "").strip()
-    return "" if text in ("--", "unknown", "none") else text
+    return "" if text in ("--", "unknown", "none", "/") else text
+
+
+def identify_snapshot(snapshot: dict) -> dict:
+    try:
+        return android_carrier.identify(snapshot)
+    except (OSError, ValueError, KeyError):
+        return {"id": None, "name": "Unknown carrier", "match": "unavailable", "parent_id": None}
+
+
+def learned_candidates(snapshot: dict, state: dict, available: set[str]) -> list[str]:
+    """Prefer a proven SIM/network pairing, then identified carrier and PLMN fallbacks."""
+    sim = str(snapshot.get("iccid") or snapshot.get("imsi") or "")
+    visited = str(snapshot.get("visited_plmn") or (state.get("visited_plmn") if state.get("sim") == sim else "") or "")
+    by_network = state.get("known_good_networks", {})
+    by_sim = state.get("known_good", {})
+    learned = by_network.get(sim + "|" + visited) if isinstance(by_network, dict) else None
+    previous = by_sim.get(sim) if isinstance(by_sim, dict) else None
+    identity = identify_snapshot(snapshot)
+    try:
+        records = {item["id"]: item for item in android_carrier.database()["carriers"]}
+        carrier = records.get(identity.get("id"))
+        # Include parent MNO identities for MVNOs, but only firmware profiles we have.
+        matched_plmns = []
+        seen = set()
+        while carrier and carrier["id"] not in seen:
+            seen.add(carrier["id"])
+            matched_plmns.extend(plmn for rule in carrier["attributes"] for plmn in rule.get("mccmnc_tuple", []))
+            carrier = records.get(carrier.get("parent_id"))
+    except (OSError, ValueError, KeyError):
+        matched_plmns = []
+    proposed = [learned, previous, *(profile_for_plmn(p) for p in matched_plmns)]
+    proposed += candidate_profiles(str(snapshot.get("home_plmn", "")), visited, available, "")
+    result = []
+    for name in proposed:
+        if name and name in available and name != snapshot.get("profile") and name not in result:
+            result.append(name)
+    return result
+
+
+def configure_apn() -> int:
+    """Configure the next explicit data connection; never bring it up here."""
+    if os.getenv("CELLULAR_APN", ""):
+        return 1  # The data switch handles the user's explicit override.
+    snapshot = modem_snapshot()
+    if not snapshot.get("home_plmn") or not snapshot.get("iccid"):
+        return 1
+    identity = identify_snapshot(snapshot)
+    try:
+        selected = android_carrier.choose_apn(snapshot, identity)
+    except (OSError, ValueError, KeyError):
+        return 1
+    connection = os.getenv("CELLULAR_CONNECTION", "cellular")
+    code, current = run(["nmcli", "-g", "gsm.auto-config,gsm.apn", "connection", "show", connection], 5)
+    if code:
+        return 1
+    state = load_state()
+    lines = current.splitlines()
+    automatic = bool(lines and lines[0].strip() in ("yes", "true"))
+    current_apn = lines[1].strip() if len(lines) > 1 else ""
+    managed = state.get("managed_apn", {})
+    if not automatic and (not isinstance(managed, dict) or managed.get("apn") != current_apn):
+        print("Retaining manually configured APN.")
+        return 0
+    if selected["status"] != "matched":
+        code, _ = run(["nmcli", "connection", "modify", connection, "gsm.apn", "", "gsm.auto-config", "yes",
+                       "gsm.username", "", "gsm.password", "", "ipv4.method", "auto", "ipv6.method", "auto"], 10)
+        managed = {}
+    else:
+        protocol = selected["protocol"]
+        code, _ = run(["nmcli", "connection", "modify", connection, "gsm.auto-config", "no",
+                       "gsm.apn", selected["apn"], "gsm.username", selected["user"], "gsm.password", selected["password"],
+                       "ipv4.method", "disabled" if protocol == "IPV6" else "auto",
+                       "ipv6.method", "disabled" if protocol == "IP" else "auto"], 10)
+        managed = {"apn": selected["apn"], "sim": snapshot["iccid"], "source": "Android"}
+    if code:
+        return 1
+    # Re-read after nmcli; never overwrite concurrent profile-learning state.
+    save_state({**load_state(), "managed_apn": managed, "apn_selection": selected["status"]})
+    print("Android APN selected." if managed else "Using provider APN autoconfiguration.")
+    return 0
 
 
 def load_state() -> dict:
@@ -243,17 +329,25 @@ def reconcile(force: bool = False, dry_run: bool = False) -> int:
         "mode": "automatic",
         "sim": sim_key,
         "home_plmn": snapshot.get("home_plmn", ""),
-        "visited_plmn": snapshot.get("visited_plmn", ""),
+        "visited_plmn": snapshot.get("visited_plmn") or (state.get("visited_plmn", "") if state.get("sim") == sim_key else ""),
         "active_profile": snapshot.get("profile", ""),
         "registration": snapshot.get("registration", ""),
         "updated_at": now,
+        "carrier_identity": identify_snapshot(snapshot),
     }
+    if sim_key == "unknown" or snapshot.get("unlock_required") not in (None, "", "sim-pin2"):
+        save_state({**state, **common, "status": "Waiting for an unlocked SIM"})
+        return 0
     if registered:
         known_good = state.get("known_good", {}) if isinstance(state.get("known_good"), dict) else {}
         if snapshot.get("profile"):
             known_good[sim_key] = snapshot["profile"]
+        networks = state.get("known_good_networks", {}) if isinstance(state.get("known_good_networks"), dict) else {}
+        if snapshot.get("profile") and snapshot.get("visited_plmn"):
+            networks[sim_key + "|" + str(snapshot["visited_plmn"])] = snapshot["profile"]
         save_state({**state, **common, "known_good": known_good, "unregistered_since": None,
-                    "status": "Healthy — native selection retained"})
+                    "known_good_networks": networks, "status": "Registered — working profile retained",
+                    "service_validation": "Network registration confirmed; SMS/IMS not independently verified"})
         print(f"Registered ({snapshot['registration']}); retaining {snapshot.get('profile') or 'current profile'}.")
         return 0
 
@@ -264,6 +358,8 @@ def reconcile(force: bool = False, dry_run: bool = False) -> int:
         print("Waiting for the modem's native carrier selection and registration.")
         return 0
     last_attempt = int(state.get("last_attempt") or 0) if same_sim else 0
+    if snapshot.get("visited_plmn") and state.get("visited_plmn") != snapshot["visited_plmn"]:
+        last_attempt = 0
     if not force and last_attempt and now - last_attempt < COOLDOWN_SECONDS:
         save_state({**state, **common, "unregistered_since": unregistered_since, "status": "Fallback cooldown — no registration"})
         print("Profile fallback is in cooldown.")
@@ -272,32 +368,45 @@ def reconcile(force: bool = False, dry_run: bool = False) -> int:
     configs = pdc_configs(str(snapshot["qmi_device"]))
     by_name = {item["description"]: item for item in configs}
     active = next((item for item in configs if item["status"] == "active"), by_name.get(str(snapshot.get("profile", ""))))
-    candidates = candidate_profiles(
-        str(snapshot.get("home_plmn", "")), str(snapshot.get("visited_plmn", "")), set(by_name),
-        str(snapshot.get("profile", "")),
-    )
-    known_good = state.get("known_good", {}) if isinstance(state.get("known_good"), dict) else {}
-    previous = str(known_good.get(sim_key) or "")
-    if previous in by_name and previous != snapshot.get("profile") and previous not in candidates:
-        candidates.insert(0, previous)
-    save_state({**state, **common, "unregistered_since": unregistered_since, "last_attempt": now, "candidates": candidates,
-                "status": "Dry run" if dry_run else "Testing fallback profiles"})
+    candidates = learned_candidates(snapshot, state, set(by_name))
     if dry_run:
         print("Candidates: " + (", ".join(candidates) or "none"))
         return 0
+    save_state({**state, **common, "unregistered_since": unregistered_since, "last_attempt": now, "candidates": candidates,
+                "status": "Testing fallback profiles"})
     if not candidates:
         save_state({**load_state(), "status": "No compatible fallback profile available", "updated_at": int(time.time())})
         return 1
 
     original = active
     for name in candidates:
+        before = modem_snapshot()
+        if str(before.get("iccid") or before.get("imsi") or "") != sim_key:
+            save_state({**load_state(), "status": "SIM changed before recovery; waiting for a stable SIM",
+                        "unregistered_since": None, "last_attempt": 0})
+            return 0
+        snapshot = before
         print(f"Testing carrier profile: {name}")
         target = by_name[name]
         if not activate_profile(snapshot, active, target):
             continue
         latest = wait_for_registration(TEST_SECONDS)
+        latest_sim = str(latest.get("iccid") or latest.get("imsi") or "")
+        if latest_sim != sim_key:
+            save_state({**load_state(), "status": "SIM changed during recovery; waiting for the new SIM",
+                        "unregistered_since": None, "last_attempt": 0})
+            return 0
         if latest.get("registration") in ("home", "roaming", "registered"):
-            save_state({**load_state(), "active_profile": name, "registration": latest.get("registration", ""),
+            learned = load_state().get("known_good", {})
+            learned = learned if isinstance(learned, dict) else {}
+            learned[sim_key] = latest.get("profile") or name
+            networks = load_state().get("known_good_networks", {})
+            networks = networks if isinstance(networks, dict) else {}
+            if latest.get("visited_plmn"):
+                networks[sim_key + "|" + str(latest["visited_plmn"])] = latest.get("profile") or name
+            save_state({**load_state(), "active_profile": latest.get("profile") or name, "registration": latest.get("registration", ""),
+                        "known_good": learned, "known_good_networks": networks,
+                        "service_validation": "Network registration confirmed; SMS/IMS not independently verified",
                         "status": f"Fallback selected {name}", "updated_at": int(time.time())})
             print(f"Registered with {name}.")
             return 0
@@ -317,6 +426,7 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="ignore grace period and cooldown")
     parser.add_argument("--dry-run", action="store_true", help="show candidates without changing the modem")
     parser.add_argument("--status", action="store_true", help="print saved automation status")
+    parser.add_argument("--configure-apn", action="store_true", help="configure an Android APN for the next data connection")
     parser.add_argument("--enable-native-auto", metavar="PORT", help="enable Quectel AutoSel while ModemManager is stopped")
     args = parser.parse_args()
     if args.status:
@@ -330,7 +440,9 @@ def main() -> int:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("Carrier profile reconciliation is already running.")
-            return 0
+            return 1 if args.configure_apn else 0
+        if args.configure_apn:
+            return configure_apn()
         return reconcile(args.force, args.dry_run)
 
 

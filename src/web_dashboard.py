@@ -221,6 +221,7 @@ def asterisk_sim_number(sim_identifier: str) -> str:
 
 
 def _gateway_status() -> dict[str, object]:
+    active_sim_iccid = ""
     status: dict[str, object] = {
         "modem_present": False,
         "sim_present": False,
@@ -288,6 +289,7 @@ def _gateway_status() -> dict[str, object]:
                 sim_index = sim_path.rsplit("/", 1)[-1]
                 sim = _json_command(["mmcli", "-i", sim_index, "-J"], 5).get("sim", {})
                 properties = sim.get("properties", {}) if isinstance(sim, dict) and isinstance(sim.get("properties"), dict) else {}
+                active_sim_iccid = useful(properties.get("iccid"))
                 if not status["phone_number_source"]:
                     number = asterisk_sim_number(useful(properties.get("iccid")))
                     if number:
@@ -331,6 +333,14 @@ def _gateway_status() -> dict[str, object]:
         if isinstance(profile_state, dict):
             status["profile_selection"] = str(profile_state.get("mode") or "automatic").title()
             status["profile_status"] = str(profile_state.get("status") or "Monitoring SIM and registration")
+            identity = profile_state.get("carrier_identity", {})
+            if active_sim_iccid and profile_state.get("sim") == active_sim_iccid and isinstance(identity, dict):
+                status["carrier_identity"] = identity
+                if identity.get("id") is not None:
+                    status["sim_home_operator"] = f"{identity['name']} · {profile_state.get('home_plmn', '')}".rstrip(" ·")
+                managed = profile_state.get("managed_apn", {})
+                if isinstance(managed, dict) and managed.get("sim") == active_sim_iccid and managed.get("apn") == status["apn"]:
+                    status["apn_mode"] = "Automatic (Android)"
     except (OSError, json.JSONDecodeError):
         pass
     return status
