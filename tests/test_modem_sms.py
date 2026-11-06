@@ -7,9 +7,30 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
 import modem_sms
+import conversation_store
 
 
 class ModemSMSTests(unittest.TestCase):
+    def test_named_muted_telegram_is_silent_and_blocked_sms_stays_local(self):
+        modem_sms.store(self.sms())
+        settings = pathlib.Path(self.temp.name) / "settings.json"
+        settings.write_text('{"telegram_bot_token":"test","telegram_chat_id":123}')
+        conversation_store.update("+15551234567", {"name": "Alice", "muted": True}, modem_sms.DATABASE)
+        with mock.patch.object(modem_sms, "SETTINGS", settings), mock.patch.object(modem_sms, "Telegram") as telegram:
+            telegram.return_value.call.return_value = {"result": {"message_id": 123}}
+            modem_sms.forward_pending()
+            payload = telegram.return_value.call.call_args.args[1]
+            self.assertEqual(payload["text"], "Alice: Missed SMS")
+            self.assertEqual(payload["disable_notification"], "true")
+            conversation_store.update("+15551234567", {"blocked": True}, modem_sms.DATABASE)
+            modem_sms.store(self.sms("2026-11-06T10:15:21+08"))
+            telegram.reset_mock()
+            modem_sms.forward_pending()
+            telegram.assert_not_called()
+        with sqlite3.connect(modem_sms.DATABASE) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM modem_sms_telegram").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 3)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

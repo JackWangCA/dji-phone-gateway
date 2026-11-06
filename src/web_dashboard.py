@@ -32,6 +32,7 @@ from sms_bridge import Config, Telegram, ami_command, safe_phone, safe_sms
 import web_push
 import modem_sms
 import cloudflare_access
+import conversation_store
 
 HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
 PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
@@ -388,6 +389,7 @@ def messages(limit: int = 500) -> list[dict[str, object]]:
                 "peer": str(peer),
                 "body": str(body),
                 "direction": "outgoing" if direction == "outgoing" else "incoming",
+                "verification_code": conversation_store.verification_code(str(body)) if direction != "outgoing" else None,
             }
             for message_id, timestamp, peer, body, direction in rows
         ]
@@ -541,6 +543,7 @@ def page(message: str = "", discovered: list[dict] | None = None) -> str:
             "telegram_enabled": settings.get("telegram_enabled", True),
             "chat_id": str(chat_id),
             "username": dashboard_username(settings),
+            "conversations": conversation_store.state(SMS_DATABASE),
             "at_interface": "Connected" if modem_present else "Missing",
             "audio_interface": "Connected" if audio_present else "Missing",
         }).replace("</", "<\\/"),
@@ -660,6 +663,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/": self.respond(page())
         elif path == "/messages": self.respond_json(messages())
         elif path == "/api/status": self.respond_json(gateway_status())
+        elif path == "/api/conversations": self.respond_json(conversation_store.state(SMS_DATABASE))
         elif path == "/api/push":
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             device_id = query.get("device_id", [""])[-1]
@@ -774,6 +778,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/messages/delete":
                 deleted = delete_messages(form.get("ids", ""), form.get("peer", ""), form.get("before_id", ""))
                 self.respond_json({"deleted": deleted, "messages": messages()})
+            elif path == "/api/conversations":
+                changes = json.loads(form.get("changes", "{}"))
+                self.respond_json(conversation_store.update(form.get("peer", ""), changes, SMS_DATABASE))
             elif path == "/api/access":
                 save_dashboard_credentials(form.get("username", ""), form.get("password", ""), form.get("confirmation", ""))
                 self.respond_json({"ok": True})

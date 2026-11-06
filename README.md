@@ -38,6 +38,31 @@ Sign out through the public hostname to end the Cloudflare Access session.
 Do not expose port 8080 directly to the Internet. Cloudflare policies and session
 duration remain managed in Cloudflare; the app does not extend an Access session.
 
+## Contacts and conversation controls
+
+Manage saved sender names in **Settings → Contacts**, or open a conversation and
+choose **Contact & options**. Names are stored on the Pi and used in the web app,
+Telegram messages, and push titles. Saved phone contacts are also suggested in the
+new-message composer. Removing a name preserves that conversation and its rules.
+
+Conversation options include pin, mute, archive, and block forwarding. Pinned
+threads sort first. Archived threads are hidden from All/Unread/Sent and remain in
+Archived until restored. Mute suppresses push alerts and sends Telegram messages
+silently. Block forwarding suppresses both destinations while still storing SMS
+locally. These rules apply to both Asterisk and ModemManager receive paths.
+
+Incoming numeric verification codes near recognized authentication phrases have a
+Copy button. Detection runs locally; no message contents go to an AI service.
+
+Read cursors are shared on the Pi, with a one-time migration from this browser's
+previous local read state. The Home Screen badge counts unread conversations,
+excluding archived, muted, blocked, and deleted threads. The open app updates and
+clears its badge as read state changes; push messages carry a count so iOS can
+update it while the app is closed. Other closed devices refresh their badge on
+their next incoming push or app opening. No silent badge-only push is sent.
+On iPhone, install the app on the Home Screen and enable its push notifications
+and system badge permission. Unsupported browsers simply omit the app-icon badge.
+
 ## Automatic SIM and carrier settings
 
 The Pi bundles Android's Apache-2.0 carrier identification and Internet APN tables

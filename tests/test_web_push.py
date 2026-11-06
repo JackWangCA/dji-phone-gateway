@@ -10,10 +10,28 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1] / "src"))
 import web_push
+import conversation_store
 
 
 @unittest.skipUnless(importlib.util.find_spec("cryptography"), "Web Push requires cryptography")
 class WebPushTests(unittest.TestCase):
+    def test_contact_title_badge_and_muted_cursor_skip(self):
+        device = web_push.subscribe(self.subscription)
+        store = conversation_store
+        store.update("+15551234567", {"name": "Alice", "muted": True}, web_push.SMS_DATABASE)
+        message_id = self.add_message("Muted message")
+        with mock.patch.object(web_push, "deliver") as deliver:
+            web_push.process_once()
+        deliver.assert_not_called()
+        with web_push.database() as db:
+            self.assertEqual(db.execute("SELECT cursor FROM devices WHERE id=?", (device,)).fetchone()[0], message_id)
+        store.update("+15551234567", {"muted": False}, web_push.SMS_DATABASE)
+        self.add_message("Next message")
+        with mock.patch.object(web_push, "deliver") as deliver:
+            web_push.process_once()
+        payload = deliver.call_args.args[1]
+        self.assertEqual(payload["title"], "Alice")
+        self.assertEqual(payload["badge_count"], 1)
     def setUp(self):
         from cryptography.hazmat.primitives.asymmetric import ec
         from cryptography.hazmat.primitives import serialization

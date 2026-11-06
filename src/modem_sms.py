@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sms_bridge import Telegram
+import conversation_store
 
 DATABASE = Path(os.getenv("SMS_DATABASE", "/var/lib/dji-phone-gateway/messages.sqlite3"))
 SETTINGS = Path(os.getenv("GATEWAY_SETTINGS", "/var/lib/dji-phone-gateway/settings.json"))
@@ -95,10 +96,16 @@ def forward_pending():
         rows = db.execute("SELECT m.id,m.sender,m.body FROM messages m JOIN modem_sms_telegram p "
                           "ON m.id=p.message_id WHERE m.deleted_at IS NULL ORDER BY m.id LIMIT 20").fetchall()
         for message_id, sender, body in rows:
+            if not conversation_store.forwarding_allowed(sender, DATABASE):
+                db.execute("DELETE FROM modem_sms_telegram WHERE message_id=?", (message_id,))
+                db.commit()
+                continue
             digits = re.sub(r"\D", "", sender)
             name = (f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
                     if len(digits) == 11 and digits.startswith("1") else sender)
-            result = Telegram(str(token)).call("sendMessage", {"chat_id": chat, "text": f"{name}: {body}"[:4096]})
+            name = conversation_store.get(sender, DATABASE)["name"] or name
+            result = Telegram(str(token)).call("sendMessage", {"chat_id": chat, "text": f"{name}: {body}"[:4096],
+                "disable_notification": "true" if conversation_store.get(sender, DATABASE)["muted"] else "false"})
             db.execute("CREATE TABLE IF NOT EXISTS telegram_reply_targets (message_id INTEGER NOT NULL, "
                        "chat_id INTEGER NOT NULL, sender TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP, "
                        "PRIMARY KEY(message_id,chat_id))")

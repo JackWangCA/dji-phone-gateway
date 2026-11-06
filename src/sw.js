@@ -4,11 +4,13 @@ self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('push',event=>{
   let payload={};
   try{payload=event.data?.json()||{}}catch(_){}
-  event.waitUntil(self.registration.showNotification(payload.title||'SMS Forwarder',{
+  const badgeUpdate=Number.isInteger(payload.badge_count)&&payload.badge_count>=0&&self.navigator?.setAppBadge
+    ? Promise.resolve().then(()=>self.navigator.setAppBadge(payload.badge_count)).catch(()=>{}) : Promise.resolve();
+  event.waitUntil(Promise.all([badgeUpdate,self.registration.showNotification(payload.title||'SMS Forwarder',{
     body:payload.body||'You have a new message.',
     icon:'/apple-touch-icon.png?v=2',badge:'/apple-touch-icon.png?v=2',
     tag:payload.tag||'sms',data:{url:payload.url||'/#conversations',peer:payload.peer||''}
-  }));
+  })]));
 });
 self.addEventListener('notificationclick',event=>{
   event.notification.close();

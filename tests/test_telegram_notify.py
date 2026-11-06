@@ -16,9 +16,26 @@ LOADER = importlib.machinery.SourceFileLoader("telegram_notify", str(SCRIPT))
 SPEC = importlib.util.spec_from_loader(LOADER.name, LOADER)
 notify = importlib.util.module_from_spec(SPEC)
 LOADER.exec_module(notify)
+import conversation_store
 
 
 class IncomingSmsTests(unittest.TestCase):
+    def test_blocked_agi_sms_is_saved_without_forwarding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = pathlib.Path(directory) / "messages.sqlite3"
+            conversation_store.update("BANK", {"blocked": True}, database)
+            settings = pathlib.Path(directory) / "settings.json"
+            settings.write_text('{"telegram_bot_token":"test","telegram_chat_id":42}')
+            with mock.patch.dict(os.environ, {"SMS_DATABASE": str(database), "GATEWAY_SETTINGS": str(settings)}), \
+                    mock.patch.object(notify.sys, "stdin", io.StringIO("\n")), \
+                    mock.patch.object(notify, "agi_variable", side_effect=["BANK", "", "Your code is 123456"]), \
+                    mock.patch.object(notify, "agi_verbose"), \
+                    mock.patch.object(notify.urllib.request, "urlopen") as request, \
+                    self.assertRaises(SystemExit):
+                notify.main()
+            request.assert_not_called()
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute("SELECT body FROM messages").fetchone()[0], "Your code is 123456")
     def test_telegram_can_be_disabled_without_stopping_sms_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             database = pathlib.Path(directory) / "messages.sqlite3"

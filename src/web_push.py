@@ -13,6 +13,7 @@ import time
 from contextlib import closing
 from pathlib import Path
 from urllib.parse import urlsplit
+import conversation_store
 
 DATA_DIR = Path(os.getenv("PUSH_DATA_DIR", "/var/lib/dji-phone-gateway"))
 PUSH_DATABASE = DATA_DIR / "push.sqlite3"
@@ -121,8 +122,9 @@ def deliver(subscription: dict, payload: dict) -> None:
 
 
 def notification(message_id: int, sender: str, body: str) -> dict:
-    return {"title": sender or "Unknown number", "body": (body or "Empty message")[:500],
-            "tag": f"sms-{message_id}", "url": "/#conversations", "peer": sender}
+    return {"title": conversation_store.display_name(sender, SMS_DATABASE), "body": (body or "Empty message")[:500],
+            "tag": f"sms-{message_id}", "url": "/#conversations", "peer": sender,
+            "badge_count": conversation_store.unread_count(SMS_DATABASE)}
 
 
 def test_notification(device_id: str) -> None:
@@ -151,6 +153,10 @@ def process_once() -> None:
             # Respect a concurrent opt-out, even midway through a backlog.
             if not device_state(device["id"])["enabled"]:
                 break
+            if not conversation_store.push_allowed(sender, SMS_DATABASE):
+                with closing(database()) as db, db:
+                    db.execute("UPDATE devices SET cursor=? WHERE id=?", (message_id, device["id"]))
+                continue
             try:
                 deliver(json.loads(device["subscription"]), notification(message_id, sender, body))
             except Exception as exc:

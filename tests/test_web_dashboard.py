@@ -168,6 +168,7 @@ class ConversationTests(unittest.TestCase):
             mock.patch.object(dashboard, "run", return_value=(0, "off")),
             mock.patch.object(dashboard, "messages", return_value=[]),
             mock.patch.object(dashboard, "gateway_status", return_value={"registration": "Searching", "services": {}}),
+            mock.patch.object(dashboard.conversation_store, "state", return_value={"peers": {}, "unread_count": 0}),
         ):
             document = dashboard.page()
         self.assertIn('<main id="main"', document)
@@ -197,6 +198,7 @@ class ConversationTests(unittest.TestCase):
             mock.patch.object(dashboard, "load_settings", return_value=settings),
             mock.patch.object(dashboard, "messages", return_value=[]),
             mock.patch.object(dashboard, "gateway_status", return_value={}),
+            mock.patch.object(dashboard.conversation_store, "state", return_value={"peers": {}, "unread_count": 0}),
         ):
             document = dashboard.page()
         self.assertNotIn("private-bot-token", document)

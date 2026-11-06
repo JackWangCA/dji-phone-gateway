@@ -7,6 +7,13 @@ import sqlite3
 import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+for source in (Path(__file__).resolve().parents[1] / "src", Path("/opt/dji-phone-gateway/src")):
+    if (source / "conversation_store.py").is_file():
+        sys.path.insert(0, str(source))
+        break
+import conversation_store
 
 
 def friendly_sender(sender):
@@ -116,10 +123,13 @@ def main():
         agi_verbose(f"DJI gateway: failed to store inbound SMS: {exc}", 3)
         raise SystemExit(1)
 
-    if not token or not chat:
+    if not token or not chat or not conversation_store.forwarding_allowed(sender, database):
         agi_verbose("DJI gateway: Telegram is off or not configured; SMS stored locally")
         raise SystemExit(0)
-    payload = urllib.parse.urlencode({"chat_id": chat, "text": telegram_notification(sender, message)}).encode()
+    label = conversation_store.get(sender, database)["name"]
+    text = f"{label}: {str(message or '').strip() or 'Empty message'}" if label else telegram_notification(sender, message)
+    payload = urllib.parse.urlencode({"chat_id": chat, "text": text,
+        "disable_notification": "true" if conversation_store.get(sender, database)["muted"] else "false"}).encode()
     req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload)
     try:
         with urllib.request.urlopen(req, timeout=15) as response:
