@@ -103,6 +103,7 @@ install -m 0755 "$src_dir/bin/dji-gateway-diag" "$install_root/bin/dji-gateway-d
 install -m 0755 "$src_dir/src/sms_bridge.py" "$install_root/src/sms_bridge.py"
 install -m 0755 "$src_dir/src/web_dashboard.py" "$install_root/src/web_dashboard.py"
 install -m 0644 "$src_dir/src/web_push.py" "$install_root/src/web_push.py"
+install -m 0644 "$src_dir/src/modem_sms.py" "$install_root/src/modem_sms.py"
 install -m 0644 "$src_dir/src/sw.js" "$install_root/src/sw.js"
 install -m 0644 "$src_dir/src/manifest.webmanifest" "$install_root/src/manifest.webmanifest"
 python3 -m venv --system-site-packages "$install_root/venv"

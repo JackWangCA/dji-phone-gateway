@@ -30,6 +30,7 @@ from pathlib import Path
 from dashboard_ui import DASHBOARD_HTML as REDESIGNED_HTML, LOGIN_HTML as REDESIGNED_LOGIN_HTML
 from sms_bridge import Config, Telegram, ami_command, safe_phone, safe_sms
 import web_push
+import modem_sms
 
 HOST = os.getenv("DASHBOARD_HOST", "0.0.0.0")
 PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
@@ -725,4 +726,5 @@ if __name__ == "__main__":
     saved_password = str(load_settings().get("dashboard_password_hash") or "")
     if (not PASSWORD or PASSWORD == "CHANGE_ME") and not saved_password: raise SystemExit("DASHBOARD_PASSWORD is not configured")
     web_push.start_worker()
+    modem_sms.start_worker()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
